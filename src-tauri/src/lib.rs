@@ -8,9 +8,10 @@ use crossbeam_channel::unbounded;
 use image::imageops::crop_imm;
 use rdev::EventType;
 use screenshots::Screen;
+use serde::Serialize;
 use tauri::Manager;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 struct ClickEvent {
     timestamp_ms: u64,
     x: f64,
@@ -24,7 +25,7 @@ struct ClickEvent {
     click_crop_error: Option<String>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 struct KeyEvent {
     timestamp_ms: u64,
     key: Option<String>,
@@ -42,9 +43,20 @@ enum InputEvent {
     Key(KeyEvent),
 }
 
+#[derive(Clone, Debug, Serialize)]
+struct RecordingSession {
+    session_id: String,
+    started_at_ms: u64,
+    stopped_at_ms: u64,
+    click_events: Vec<ClickEvent>,
+    key_events: Vec<KeyEvent>,
+}
+
 struct RecorderState {
     is_recording: bool,
     session_id: Option<String>,
+    started_at_ms: Option<u64>,
+    recording_dir: Option<PathBuf>,
     shots_dir: Option<PathBuf>,
     click_events: Vec<ClickEvent>,
     key_events: Vec<KeyEvent>,
@@ -58,6 +70,8 @@ impl RecorderState {
         Self {
             is_recording: false,
             session_id: None,
+            started_at_ms: None,
+            recording_dir: None,
             shots_dir: None,
             click_events: Vec::new(),
             key_events: Vec::new(),
@@ -159,6 +173,27 @@ fn capture_window_crop_screenshot(
 ) -> Result<(String, bool), String> {
     let path = capture_full_screenshot(shots_dir, "window", timestamp_ms)?;
     Ok((path, true))
+}
+
+fn write_recording_json(
+    recording_dir: &PathBuf,
+    recording: &RecordingSession,
+) -> Result<(), String> {
+    fs::create_dir_all(recording_dir)
+        .map_err(|error| format!("Recording dir create failed: {error}"))?;
+    let payload = serde_json::to_vec_pretty(recording)
+        .map_err(|error| format!("JSON encode failed: {error}"))?;
+    let temp_path = recording_dir.join("recording.json.tmp");
+    let target_path = recording_dir.join("recording.json");
+    fs::write(&temp_path, payload)
+        .map_err(|error| format!("Recording JSON write failed: {error}"))?;
+    if target_path.exists() {
+        fs::remove_file(&target_path)
+            .map_err(|error| format!("Recording JSON remove failed: {error}"))?;
+    }
+    fs::rename(&temp_path, &target_path)
+        .map_err(|error| format!("Recording JSON rename failed: {error}"))?;
+    Ok(())
 }
 
 fn spawn_global_input_listener(state: Arc<Mutex<RecorderState>>) {
@@ -311,18 +346,26 @@ fn start_recording(
     if state.is_recording {
         return Err("Recording already in progress".to_string());
     }
+    let has_pending = state.session_id.is_some()
+        && (!state.click_events.is_empty() || !state.key_events.is_empty());
+    if has_pending {
+        return Err("Previous recording not saved yet".to_string());
+    }
 
     let session_id = new_session_id();
     let base_dir = app_handle
         .path()
         .app_data_dir()
         .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
-    let shots_dir = base_dir.join("recordings").join(&session_id).join("shots");
+    let recording_dir = base_dir.join("recordings").join(&session_id);
+    let shots_dir = recording_dir.join("shots");
     if let Err(error) = fs::create_dir_all(&shots_dir) {
         eprintln!("Failed to create recordings dir: {error:?}");
     }
     state.is_recording = true;
     state.session_id = Some(session_id.clone());
+    state.started_at_ms = Some(now_millis());
+    state.recording_dir = Some(recording_dir);
     state.shots_dir = Some(shots_dir);
     state.click_events.clear();
     state.key_events.clear();
@@ -332,17 +375,52 @@ fn start_recording(
 
 #[tauri::command]
 fn stop_recording(state: tauri::State<Arc<Mutex<RecorderState>>>) -> Result<String, String> {
-    let mut state = state
+    let mut recorder_state = state
         .lock()
         .map_err(|_| "Recording state lock poisoned".to_string())?;
 
-    if !state.is_recording {
+    let has_pending = recorder_state.session_id.is_some()
+        && (!recorder_state.click_events.is_empty() || !recorder_state.key_events.is_empty());
+    if !recorder_state.is_recording && !has_pending {
         return Err("Recording is not active".to_string());
     }
 
-    state.is_recording = false;
-    state.shots_dir = None;
-    Ok(state.session_id.take().unwrap_or_else(new_session_id))
+    let session_id = recorder_state
+        .session_id
+        .clone()
+        .unwrap_or_else(new_session_id);
+    let started_at_ms = recorder_state.started_at_ms.unwrap_or_else(now_millis);
+    let recording_dir = recorder_state
+        .recording_dir
+        .clone()
+        .ok_or_else(|| "Recording directory not initialized".to_string())?;
+    let click_events = recorder_state.click_events.clone();
+    let key_events = recorder_state.key_events.clone();
+    recorder_state.is_recording = false;
+    drop(recorder_state);
+
+    let stopped_at_ms = now_millis();
+    let recording = RecordingSession {
+        session_id: session_id.clone(),
+        started_at_ms,
+        stopped_at_ms,
+        click_events,
+        key_events,
+    };
+    write_recording_json(&recording_dir, &recording)?;
+
+    let mut recorder_state = state
+        .lock()
+        .map_err(|_| "Recording state lock poisoned".to_string())?;
+    recorder_state.is_recording = false;
+    recorder_state.session_id = None;
+    recorder_state.started_at_ms = None;
+    recorder_state.recording_dir = None;
+    recorder_state.shots_dir = None;
+    recorder_state.click_events.clear();
+    recorder_state.key_events.clear();
+
+    Ok(session_id)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

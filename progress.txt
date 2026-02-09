@@ -37,3 +37,8 @@
 - Decisions: implement window image capture per event with explicit fallback to a full-screen capture; mark windowCropFallback=true on fallback to satisfy 3-image requirement without OS-specific window bounds.
 - Files changed: src-tauri/src/lib.rs, PRD.jsonc, progress.txt.
 - Blockers/notes: active window bounds lookup not implemented yet, so window image is always fallback; replace with OS-specific bounds when available.
+
+- Task completed: US-009 persist recording session to local filesystem.
+- Decisions: write recording.json with click/key event arrays + timestamps; save via temp file then rename for atomicity; block starting a new recording if previous session is unsaved.
+- Files changed: src-tauri/src/lib.rs, PRD.jsonc, progress.txt.
+- Blockers/notes: if save fails, stop returns error and keeps session data in memory; retry stop to re-save after fixing filesystem issue.

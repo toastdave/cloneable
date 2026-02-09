@@ -126,8 +126,8 @@
         "Recording can be loaded after app restart"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": "Prefer JSON for speed. Structure the schema to allow future SQLite migration if desired. Keep writes safe (atomic rewrite on save is OK for this scope)."
+      "passes": true,
+      "notes": "Persisted recording.json under recordings/<session>/ with click/key events and screenshot paths; write is temp + rename for atomic save. Structure remains JSON to keep SQLite migration feasible later."
     },
     {
       "id": "US-010",
