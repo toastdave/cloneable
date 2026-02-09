@@ -47,3 +47,8 @@
 - Decisions: keep README concise; document shipped vs cut scope; use written walkthrough to avoid video requirement; include AI usage notes explicitly.
 - Files changed: README.md, PRD.jsonc, progress.txt.
 - Blockers/notes: none.
+
+- Task completed: US-010 load completed recording for review.
+- Decisions: add load_recording Rust command to read recording.json; build chronological step list in UI on stop; show per-step metadata and screenshot paths without live streaming.
+- Files changed: src-tauri/src/lib.rs, src/App.tsx, src/App.css, PRD.jsonc, progress.txt.
+- Blockers/notes: step model is display-only; richer grouping/annotations still pending (US-011/US-012).

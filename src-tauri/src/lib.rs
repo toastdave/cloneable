@@ -8,10 +8,10 @@ use crossbeam_channel::unbounded;
 use image::imageops::crop_imm;
 use rdev::EventType;
 use screenshots::Screen;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::Manager;
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 struct ClickEvent {
     timestamp_ms: u64,
     x: f64,
@@ -25,7 +25,7 @@ struct ClickEvent {
     click_crop_error: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 struct KeyEvent {
     timestamp_ms: u64,
     key: Option<String>,
@@ -43,7 +43,7 @@ enum InputEvent {
     Key(KeyEvent),
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 struct RecordingSession {
     session_id: String,
     started_at_ms: u64,
@@ -423,6 +423,26 @@ fn stop_recording(state: tauri::State<Arc<Mutex<RecorderState>>>) -> Result<Stri
     Ok(session_id)
 }
 
+#[tauri::command]
+fn load_recording(
+    app_handle: tauri::AppHandle,
+    session_id: String,
+) -> Result<RecordingSession, String> {
+    let base_dir = app_handle
+        .path()
+        .app_data_dir()
+        .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    let recording_path = base_dir
+        .join("recordings")
+        .join(&session_id)
+        .join("recording.json");
+    let payload = fs::read(&recording_path)
+        .map_err(|error| format!("Recording JSON read failed: {error}"))?;
+    let recording = serde_json::from_slice::<RecordingSession>(&payload)
+        .map_err(|error| format!("Recording JSON parse failed: {error}"))?;
+    Ok(recording)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let recorder_state = Arc::new(Mutex::new(RecorderState::new()));
@@ -431,7 +451,11 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(recorder_state)
-        .invoke_handler(tauri::generate_handler![start_recording, stop_recording])
+        .invoke_handler(tauri::generate_handler![
+            start_recording,
+            stop_recording,
+            load_recording
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

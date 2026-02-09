@@ -140,8 +140,8 @@
         "UI works without real-time streaming (load on stop is sufficient)"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": "This begins the should-have layer only after must-haves are stable. Avoid event streaming complexity for MVP."
+      "passes": true,
+      "notes": "Added a load_recording command that reads recording.json and returns it to the UI. The frontend now loads the session after stop, builds a chronological step list, and shows metadata + screenshot paths in a selectable detail panel."
     },
     {
       "id": "US-011",
