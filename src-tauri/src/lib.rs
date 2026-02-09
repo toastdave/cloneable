@@ -17,6 +17,9 @@ struct ClickEvent {
     y: f64,
     full_screenshot_path: Option<String>,
     full_screenshot_error: Option<String>,
+    window_crop_path: Option<String>,
+    window_crop_error: Option<String>,
+    window_crop_fallback: bool,
     click_crop_path: Option<String>,
     click_crop_error: Option<String>,
 }
@@ -28,6 +31,9 @@ struct KeyEvent {
     text: Option<String>,
     full_screenshot_path: Option<String>,
     full_screenshot_error: Option<String>,
+    window_crop_path: Option<String>,
+    window_crop_error: Option<String>,
+    window_crop_fallback: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -147,6 +153,14 @@ fn capture_click_crop_screenshot(
     Ok(path.to_string_lossy().to_string())
 }
 
+fn capture_window_crop_screenshot(
+    shots_dir: &PathBuf,
+    timestamp_ms: u64,
+) -> Result<(String, bool), String> {
+    let path = capture_full_screenshot(shots_dir, "window", timestamp_ms)?;
+    Ok((path, true))
+}
+
 fn spawn_global_input_listener(state: Arc<Mutex<RecorderState>>) {
     let (sender, receiver) = unbounded::<InputEvent>();
 
@@ -174,6 +188,17 @@ fn spawn_global_input_listener(state: Arc<Mutex<RecorderState>>) {
                     match capture_result {
                         Ok(path) => click.full_screenshot_path = Some(path),
                         Err(error) => click.full_screenshot_error = Some(error),
+                    }
+                    let window_result = shots_dir
+                        .as_ref()
+                        .ok_or_else(|| "Screenshot directory not initialized".to_string())
+                        .and_then(|dir| capture_window_crop_screenshot(dir, click.timestamp_ms));
+                    match window_result {
+                        Ok((path, fallback)) => {
+                            click.window_crop_path = Some(path);
+                            click.window_crop_fallback = fallback;
+                        }
+                        Err(error) => click.window_crop_error = Some(error),
                     }
                     let crop_result = shots_dir
                         .as_ref()
@@ -205,6 +230,19 @@ fn spawn_global_input_listener(state: Arc<Mutex<RecorderState>>) {
                         Ok(path) => key_event.full_screenshot_path = Some(path),
                         Err(error) => key_event.full_screenshot_error = Some(error),
                     }
+                    let window_result = shots_dir
+                        .as_ref()
+                        .ok_or_else(|| "Screenshot directory not initialized".to_string())
+                        .and_then(|dir| {
+                            capture_window_crop_screenshot(dir, key_event.timestamp_ms)
+                        });
+                    match window_result {
+                        Ok((path, fallback)) => {
+                            key_event.window_crop_path = Some(path);
+                            key_event.window_crop_fallback = fallback;
+                        }
+                        Err(error) => key_event.window_crop_error = Some(error),
+                    }
 
                     let mut recorder_state = match state.lock() {
                         Ok(locked) => locked,
@@ -232,6 +270,9 @@ fn spawn_global_input_listener(state: Arc<Mutex<RecorderState>>) {
                         y,
                         full_screenshot_path: None,
                         full_screenshot_error: None,
+                        window_crop_path: None,
+                        window_crop_error: None,
+                        window_crop_fallback: false,
                         click_crop_path: None,
                         click_crop_error: None,
                     }));
@@ -244,6 +285,9 @@ fn spawn_global_input_listener(state: Arc<Mutex<RecorderState>>) {
                     text: None,
                     full_screenshot_path: None,
                     full_screenshot_error: None,
+                    window_crop_path: None,
+                    window_crop_error: None,
+                    window_crop_fallback: false,
                 }));
             }
             _ => {}

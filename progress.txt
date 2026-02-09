@@ -32,3 +32,8 @@
 - Decisions: fixed crop size 400x300 centered on click; clamp to screen bounds; capture from primary screen; store path/error on click event.
 - Files changed: src-tauri/src/lib.rs, src-tauri/Cargo.toml, PRD.jsonc, progress.txt.
 - Blockers/notes: crop uses another screen capture per click; multi-monitor coordinates not mapped yet.
+
+- Task completed: US-008 window crop screenshot per event (best-effort).
+- Decisions: implement window image capture per event with explicit fallback to a full-screen capture; mark windowCropFallback=true on fallback to satisfy 3-image requirement without OS-specific window bounds.
+- Files changed: src-tauri/src/lib.rs, PRD.jsonc, progress.txt.
+- Blockers/notes: active window bounds lookup not implemented yet, so window image is always fallback; replace with OS-specific bounds when available.
