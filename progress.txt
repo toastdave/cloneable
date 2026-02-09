@@ -2,3 +2,8 @@
 - Decisions: keep frontend-only state toggle; defer Tauri invoke wiring to US-003; bespoke CSS to make status obvious.
 - Files changed: src/App.tsx, src/App.css, PRD.jsonc.
 - Blockers/notes: backend start/stop not wired yet; no persistence yet.
+
+- Task completed: US-001 verify scaffold builds with Bun.
+- Decisions: ran `bun install` + `bun run build` to cover install and typecheck/build; skipped `bun run tauri dev` due to headless run.
+- Files changed: PRD.jsonc, progress.txt.
+- Blockers/notes: re-run `bun run tauri dev` on desktop to confirm window launch.

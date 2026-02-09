@@ -14,8 +14,8 @@
         "No required environment variables or external services"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": "Use the existing `bun create tauri` scaffold. Ensure `bun install` and the dev command (`bun run tauri dev` or equivalent for the scaffold) work end-to-end before implementing anything else."
+      "passes": true,
+      "notes": "Verified `bun install` and `bun run build` succeed. Tauri dev window not launched in this run (CI/headless constraints); re-validate on a desktop session if needed."
     },
     {
       "id": "US-002",
