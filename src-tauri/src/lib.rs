@@ -37,6 +37,24 @@ struct KeyEvent {
     window_crop_fallback: bool,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum StepEventType {
+    Click,
+    Key,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct Step {
+    id: String,
+    event_type: StepEventType,
+    timestamp_ms: u64,
+    full_screenshot_path: Option<String>,
+    window_crop_path: Option<String>,
+    window_crop_fallback: bool,
+    click_crop_path: Option<String>,
+}
+
 #[derive(Clone, Debug)]
 enum InputEvent {
     Click(ClickEvent),
@@ -50,6 +68,8 @@ struct RecordingSession {
     stopped_at_ms: u64,
     click_events: Vec<ClickEvent>,
     key_events: Vec<KeyEvent>,
+    #[serde(default)]
+    steps: Vec<Step>,
 }
 
 struct RecorderState {
@@ -60,6 +80,7 @@ struct RecorderState {
     shots_dir: Option<PathBuf>,
     click_events: Vec<ClickEvent>,
     key_events: Vec<KeyEvent>,
+    listener_error: Option<String>,
 }
 
 const CLICK_CROP_WIDTH: u32 = 400;
@@ -75,8 +96,17 @@ impl RecorderState {
             shots_dir: None,
             click_events: Vec::new(),
             key_events: Vec::new(),
+            listener_error: None,
         }
     }
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct StopRecordingResult {
+    session_id: String,
+    click_count: usize,
+    key_count: usize,
+    listener_error: Option<String>,
 }
 
 fn new_session_id() -> String {
@@ -173,6 +203,34 @@ fn capture_window_crop_screenshot(
 ) -> Result<(String, bool), String> {
     let path = capture_full_screenshot(shots_dir, "window", timestamp_ms)?;
     Ok((path, true))
+}
+
+fn build_steps(click_events: &[ClickEvent], key_events: &[KeyEvent]) -> Vec<Step> {
+    let mut steps = Vec::with_capacity(click_events.len() + key_events.len());
+    for (index, event) in click_events.iter().enumerate() {
+        steps.push(Step {
+            id: format!("click-{}-{}", event.timestamp_ms, index),
+            event_type: StepEventType::Click,
+            timestamp_ms: event.timestamp_ms,
+            full_screenshot_path: event.full_screenshot_path.clone(),
+            window_crop_path: event.window_crop_path.clone(),
+            window_crop_fallback: event.window_crop_fallback,
+            click_crop_path: event.click_crop_path.clone(),
+        });
+    }
+    for (index, event) in key_events.iter().enumerate() {
+        steps.push(Step {
+            id: format!("key-{}-{}", event.timestamp_ms, index),
+            event_type: StepEventType::Key,
+            timestamp_ms: event.timestamp_ms,
+            full_screenshot_path: event.full_screenshot_path.clone(),
+            window_crop_path: event.window_crop_path.clone(),
+            window_crop_fallback: event.window_crop_fallback,
+            click_crop_path: None,
+        });
+    }
+    steps.sort_by_key(|step| step.timestamp_ms);
+    steps
 }
 
 fn write_recording_json(
@@ -329,7 +387,11 @@ fn spawn_global_input_listener(state: Arc<Mutex<RecorderState>>) {
         });
 
         if let Err(error) = result {
-            eprintln!("Global input listener stopped: {error:?}");
+            let message = format!("Global input listener stopped: {error:?}");
+            eprintln!("{message}");
+            if let Ok(mut recorder_state) = state.lock() {
+                recorder_state.listener_error = Some(message);
+            }
         }
     });
 }
@@ -369,12 +431,15 @@ fn start_recording(
     state.shots_dir = Some(shots_dir);
     state.click_events.clear();
     state.key_events.clear();
+    state.listener_error = None;
 
     Ok(session_id)
 }
 
 #[tauri::command]
-fn stop_recording(state: tauri::State<Arc<Mutex<RecorderState>>>) -> Result<String, String> {
+fn stop_recording(
+    state: tauri::State<Arc<Mutex<RecorderState>>>,
+) -> Result<StopRecordingResult, String> {
     let mut recorder_state = state
         .lock()
         .map_err(|_| "Recording state lock poisoned".to_string())?;
@@ -396,16 +461,19 @@ fn stop_recording(state: tauri::State<Arc<Mutex<RecorderState>>>) -> Result<Stri
         .ok_or_else(|| "Recording directory not initialized".to_string())?;
     let click_events = recorder_state.click_events.clone();
     let key_events = recorder_state.key_events.clone();
+    let listener_error = recorder_state.listener_error.clone();
     recorder_state.is_recording = false;
     drop(recorder_state);
 
     let stopped_at_ms = now_millis();
+    let steps = build_steps(&click_events, &key_events);
     let recording = RecordingSession {
         session_id: session_id.clone(),
         started_at_ms,
         stopped_at_ms,
         click_events,
         key_events,
+        steps,
     };
     write_recording_json(&recording_dir, &recording)?;
 
@@ -420,7 +488,12 @@ fn stop_recording(state: tauri::State<Arc<Mutex<RecorderState>>>) -> Result<Stri
     recorder_state.click_events.clear();
     recorder_state.key_events.clear();
 
-    Ok(session_id)
+    Ok(StopRecordingResult {
+        session_id,
+        click_count: click_events.len(),
+        key_count: key_events.len(),
+        listener_error,
+    })
 }
 
 #[tauri::command]
@@ -438,8 +511,11 @@ fn load_recording(
         .join("recording.json");
     let payload = fs::read(&recording_path)
         .map_err(|error| format!("Recording JSON read failed: {error}"))?;
-    let recording = serde_json::from_slice::<RecordingSession>(&payload)
+    let mut recording = serde_json::from_slice::<RecordingSession>(&payload)
         .map_err(|error| format!("Recording JSON parse failed: {error}"))?;
+    if recording.steps.is_empty() {
+        recording.steps = build_steps(&recording.click_events, &recording.key_events);
+    }
     Ok(recording)
 }
 

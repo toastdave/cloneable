@@ -154,8 +154,8 @@
         "Document that richer grouping/inference is deferred"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": "Define 'discernible' as a consistent, inspectable structure rather than advanced inference. More intelligent grouping belongs in nice-to-haves."
+      "passes": true,
+      "notes": "Added a backend Step model with one-to-one event mapping, persisted in recording.json and returned to the UI. UI now renders from steps with consistent screenshot fields; richer grouping remains deferred."
     },
     {
       "id": "US-012",

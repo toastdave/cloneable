@@ -28,15 +28,33 @@ type KeyEvent = {
   window_crop_fallback: boolean;
 };
 
+type RecordingStep = {
+  id: string;
+  event_type: "click" | "key";
+  timestamp_ms: number;
+  full_screenshot_path: string | null;
+  window_crop_path: string | null;
+  window_crop_fallback: boolean;
+  click_crop_path: string | null;
+};
+
 type RecordingSession = {
   session_id: string;
   started_at_ms: number;
   stopped_at_ms: number;
   click_events: ClickEvent[];
   key_events: KeyEvent[];
+  steps: RecordingStep[];
 };
 
-type Step = {
+type StopRecordingResult = {
+  session_id: string;
+  click_count: number;
+  key_count: number;
+  listener_error: string | null;
+};
+
+type DisplayStep = {
   id: string;
   type: "click" | "key";
   timestamp_ms: number;
@@ -48,33 +66,20 @@ type Step = {
   clickScreenshot: string | null;
 };
 
-function buildSteps(session: RecordingSession): Step[] {
-  const clickSteps = session.click_events.map((event, index) => ({
-    id: `click-${event.timestamp_ms}-${index}`,
-    type: "click" as const,
-    timestamp_ms: event.timestamp_ms,
-    headline: `Click at ${event.x.toFixed(0)}, ${event.y.toFixed(0)}`,
-    summary: "Mouse click",
-    fullScreenshot: event.full_screenshot_path,
-    windowScreenshot: event.window_crop_path,
-    windowFallback: event.window_crop_fallback,
-    clickScreenshot: event.click_crop_path,
-  }));
-  const keySteps = session.key_events.map((event, index) => ({
-    id: `key-${event.timestamp_ms}-${index}`,
-    type: "key" as const,
-    timestamp_ms: event.timestamp_ms,
-    headline: event.key ? `Key ${event.key}` : "Key press",
-    summary: "Keyboard input",
-    fullScreenshot: event.full_screenshot_path,
-    windowScreenshot: event.window_crop_path,
-    windowFallback: event.window_crop_fallback,
-    clickScreenshot: null,
-  }));
-
-  return [...clickSteps, ...keySteps].sort(
-    (left, right) => left.timestamp_ms - right.timestamp_ms,
-  );
+function buildDisplaySteps(session: RecordingSession): DisplayStep[] {
+  return [...session.steps]
+    .sort((left, right) => left.timestamp_ms - right.timestamp_ms)
+    .map((step) => ({
+      id: step.id,
+      type: step.event_type,
+      timestamp_ms: step.timestamp_ms,
+      headline: step.event_type === "click" ? "Click" : "Key press",
+      summary: step.event_type === "click" ? "Mouse click" : "Keyboard input",
+      fullScreenshot: step.full_screenshot_path,
+      windowScreenshot: step.window_crop_path,
+      windowFallback: step.window_crop_fallback,
+      clickScreenshot: step.click_crop_path,
+    }));
 }
 
 function formatTimestamp(timestampMs: number) {
@@ -118,22 +123,29 @@ function App() {
   async function handleStopRecording() {
     setErrorMessage(null);
     try {
-      const sessionId = await invoke<string>("stop_recording");
-      setRecordingId(sessionId);
+      const result = await invoke<StopRecordingResult>("stop_recording");
+      setRecordingId(result.session_id);
       setIsRecording(false);
       const session = await invoke<RecordingSession>("load_recording", {
-        sessionId,
+        sessionId: result.session_id,
       });
       setLoadedSession(session);
-      const steps = buildSteps(session);
+      const steps = buildDisplaySteps(session);
       setSelectedStepId(steps[0]?.id ?? null);
+      if (result.listener_error) {
+        setErrorMessage(result.listener_error);
+      } else if (result.click_count + result.key_count === 0) {
+        setErrorMessage(
+          "No input events were captured. On Wayland compositors like Hyprland, global input capture may be blocked. Try an X11 session or ensure your user has permission to read input devices.",
+        );
+      }
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
     }
   }
 
   const steps = useMemo(
-    () => (loadedSession ? buildSteps(loadedSession) : []),
+    () => (loadedSession ? buildDisplaySteps(loadedSession) : []),
     [loadedSession],
   );
   const selectedStep = steps.find((step) => step.id === selectedStepId) ?? null;
@@ -200,12 +212,12 @@ function App() {
         {loadedSession ? (
           <section className="review">
             <header className="review-header">
-              <div>
-                <p className="review-label">Captured steps</p>
-                <p className="review-meta">
-                  {steps.length} events · Session {loadedSession.session_id}
-                </p>
-              </div>
+                <div>
+                  <p className="review-label">Captured steps</p>
+                  <p className="review-meta">
+                    {steps.length} steps · Session {loadedSession.session_id}
+                  </p>
+                </div>
               <div className="review-timing">
                 <p className="review-label">Recorded</p>
                 <p className="review-meta">

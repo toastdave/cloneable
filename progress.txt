@@ -52,3 +52,8 @@
 - Decisions: add load_recording Rust command to read recording.json; build chronological step list in UI on stop; show per-step metadata and screenshot paths without live streaming.
 - Files changed: src-tauri/src/lib.rs, src/App.tsx, src/App.css, PRD.jsonc, progress.txt.
 - Blockers/notes: step model is display-only; richer grouping/annotations still pending (US-011/US-012).
+
+- Task completed: US-011 parse events into discernible steps.
+- Decisions: define a backend Step model with consistent fields; build steps from click/key events on stop and backfill on load if missing; keep UI rendering step-based with generic labels to avoid over-inference.
+- Files changed: src-tauri/src/lib.rs, src/App.tsx, PRD.jsonc, progress.txt.
+- Blockers/notes: steps do not yet include annotation or actionType; follow-ups in US-012/US-013.
