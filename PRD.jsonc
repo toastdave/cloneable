@@ -98,8 +98,8 @@
         "Crop size is a constant (e.g., 400x300) and documented"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": "Interpret 'click crop of the UI element' as a fixed-size crop around the click point. True element detection is out-of-scope; document this tradeoff."
+      "passes": true,
+      "notes": "Implemented a fixed-size 400x300 crop centered on click coordinates, clamped to screen bounds. Crop capture uses primary screen only; true UI element detection remains out-of-scope."
     },
     {
       "id": "US-008",

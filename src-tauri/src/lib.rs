@@ -5,6 +5,7 @@ use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crossbeam_channel::unbounded;
+use image::imageops::crop_imm;
 use rdev::EventType;
 use screenshots::Screen;
 use tauri::Manager;
@@ -16,6 +17,8 @@ struct ClickEvent {
     y: f64,
     full_screenshot_path: Option<String>,
     full_screenshot_error: Option<String>,
+    click_crop_path: Option<String>,
+    click_crop_error: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -40,6 +43,9 @@ struct RecorderState {
     click_events: Vec<ClickEvent>,
     key_events: Vec<KeyEvent>,
 }
+
+const CLICK_CROP_WIDTH: u32 = 400;
+const CLICK_CROP_HEIGHT: u32 = 300;
 
 impl RecorderState {
     fn new() -> Self {
@@ -88,6 +94,59 @@ fn capture_full_screenshot(
     Ok(path.to_string_lossy().to_string())
 }
 
+fn clamp_crop_bounds(
+    center_x: f64,
+    center_y: f64,
+    screen_width: u32,
+    screen_height: u32,
+) -> (u32, u32, u32, u32) {
+    let crop_width = CLICK_CROP_WIDTH.min(screen_width);
+    let crop_height = CLICK_CROP_HEIGHT.min(screen_height);
+    let half_width = (crop_width / 2) as i64;
+    let half_height = (crop_height / 2) as i64;
+    let mut left = center_x.round() as i64 - half_width;
+    let mut top = center_y.round() as i64 - half_height;
+    if left < 0 {
+        left = 0;
+    }
+    if top < 0 {
+        top = 0;
+    }
+    let max_left = screen_width.saturating_sub(crop_width) as i64;
+    let max_top = screen_height.saturating_sub(crop_height) as i64;
+    if left > max_left {
+        left = max_left;
+    }
+    if top > max_top {
+        top = max_top;
+    }
+
+    (left as u32, top as u32, crop_width, crop_height)
+}
+
+fn capture_click_crop_screenshot(
+    shots_dir: &PathBuf,
+    timestamp_ms: u64,
+    x: f64,
+    y: f64,
+) -> Result<String, String> {
+    let screens = Screen::all().map_err(|error| format!("Screen list failed: {error}"))?;
+    let screen = screens
+        .first()
+        .ok_or_else(|| "No screen available for capture".to_string())?;
+    let image = screen
+        .capture()
+        .map_err(|error| format!("Screen capture failed: {error}"))?;
+    let (left, top, crop_width, crop_height) =
+        clamp_crop_bounds(x, y, image.width(), image.height());
+    let crop = crop_imm(&image, left, top, crop_width, crop_height).to_image();
+    let filename = format!("click-crop-{timestamp_ms}.png");
+    let path = shots_dir.join(filename);
+    crop.save(&path)
+        .map_err(|error| format!("Crop save failed: {error}"))?;
+    Ok(path.to_string_lossy().to_string())
+}
+
 fn spawn_global_input_listener(state: Arc<Mutex<RecorderState>>) {
     let (sender, receiver) = unbounded::<InputEvent>();
 
@@ -115,6 +174,16 @@ fn spawn_global_input_listener(state: Arc<Mutex<RecorderState>>) {
                     match capture_result {
                         Ok(path) => click.full_screenshot_path = Some(path),
                         Err(error) => click.full_screenshot_error = Some(error),
+                    }
+                    let crop_result = shots_dir
+                        .as_ref()
+                        .ok_or_else(|| "Screenshot directory not initialized".to_string())
+                        .and_then(|dir| {
+                            capture_click_crop_screenshot(dir, click.timestamp_ms, click.x, click.y)
+                        });
+                    match crop_result {
+                        Ok(path) => click.click_crop_path = Some(path),
+                        Err(error) => click.click_crop_error = Some(error),
                     }
 
                     let mut recorder_state = match state.lock() {
@@ -163,6 +232,8 @@ fn spawn_global_input_listener(state: Arc<Mutex<RecorderState>>) {
                         y,
                         full_screenshot_path: None,
                         full_screenshot_error: None,
+                        click_crop_path: None,
+                        click_crop_error: None,
                     }));
                 }
             }

@@ -27,3 +27,8 @@
 - Decisions: use `screenshots` crate with primary screen capture; store PNGs under app data `recordings/<session>/shots` and attach path/error to each event; keep capture in worker thread to avoid blocking hook callback.
 - Files changed: src-tauri/src/lib.rs, src-tauri/Cargo.toml, PRD.jsonc, progress.txt.
 - Blockers/notes: capture is best-effort and tied to primary screen only; screenshot crate has future-incompatibility warning noted by cargo.
+
+- Task completed: US-007 click crop screenshot per event.
+- Decisions: fixed crop size 400x300 centered on click; clamp to screen bounds; capture from primary screen; store path/error on click event.
+- Files changed: src-tauri/src/lib.rs, src-tauri/Cargo.toml, PRD.jsonc, progress.txt.
+- Blockers/notes: crop uses another screen capture per click; multi-monitor coordinates not mapped yet.
