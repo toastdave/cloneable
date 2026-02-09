@@ -1,0 +1,232 @@
+{
+  "project": "Cloneable Workflow Recorder",
+  "branchName": "feature/workflow-recorder-mvp",
+  "description": "Build a Tauri desktop app (already scaffolded via `bun create tauri`) that records desktop workflow actions. Must-haves: a frontend Start/Stop recording control, a Rust backend that monitors global mouse clicks and keyboard entries, and capture 3 screenshots per event (full screen, window crop, click crop). Should-haves (only after must-haves work): parse events into discernible steps, allow annotation (title/description), and classify action type (click/type/wait/assert). Nice-to-haves: auto-group text input and keyboard shortcuts. Storage is local-only; prefer simple JSON + filesystem for speed, with clear tradeoffs documented in README.",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Verify scaffolded Tauri app runs with Bun",
+      "description": "As a developer, I want to confirm the existing Tauri scaffold builds and runs so I can iterate quickly on features.",
+      "acceptanceCriteria": [
+        "Project builds successfully using Bun toolchain",
+        "Tauri dev mode launches the desktop window",
+        "Basic frontend renders without runtime errors",
+        "No required environment variables or external services"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": "Use the existing `bun create tauri` scaffold. Ensure `bun install` and the dev command (`bun run tauri dev` or equivalent for the scaffold) work end-to-end before implementing anything else."
+    },
+    {
+      "id": "US-002",
+      "title": "Add recording controls to the UI (Start/Stop)",
+      "description": "As a user, I want to start and stop workflow recording from the app UI.",
+      "acceptanceCriteria": [
+        "Start Recording button is visible and clickable",
+        "Stop Recording button appears (or Start toggles to Stop) while recording",
+        "UI indicates recording state (idle vs recording)",
+        "Start is disabled while recording and Stop is disabled while idle"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": "Keep UI minimal. If Tailwind/shadcn setup would slow progress, use basic HTML buttons first and style later. Must-have is functional controls."
+    },
+    {
+      "id": "US-003",
+      "title": "Implement Tauri command bridge for start/stop recording",
+      "description": "As the frontend, I need to call Rust commands to start and stop the recording process.",
+      "acceptanceCriteria": [
+        "Frontend invokes `start_recording` successfully",
+        "Frontend invokes `stop_recording` successfully",
+        "Rust maintains recording state (idle/recording) and rejects invalid transitions (e.g., start twice)",
+        "Stop returns a recording identifier or path needed to load the recording for review"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": "Use Tauri `invoke()` from the React frontend. In Rust, store state in an `Arc<Mutex<...>>` (or equivalent) owned by the Tauri app state."
+    },
+    {
+      "id": "US-004",
+      "title": "Global mouse click capture in Rust backend",
+      "description": "As the system, I want to record global mouse click events so clicks outside the app window are captured.",
+      "acceptanceCriteria": [
+        "Captures mouse click events globally (outside the Tauri window)",
+        "Each click event records timestamp and screen coordinates (x/y)",
+        "Events are only collected while recording is active",
+        "Click events are buffered/queued safely without blocking the hook thread"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": "Candidate crate: `rdev` (cross-platform global event listening). Validate early: this is a core risk area. If permissions are needed (e.g., macOS accessibility), document them in README."
+    },
+    {
+      "id": "US-005",
+      "title": "Global keyboard entry capture in Rust backend",
+      "description": "As the system, I want to record keyboard entries globally so typed input outside the app window is captured.",
+      "acceptanceCriteria": [
+        "Captures keyboard events globally while recording is active",
+        "Records timestamp and key data (keycode and/or printable character when available)",
+        "Does not crash or block under rapid typing",
+        "If printable text capture is incomplete, key events still persist as keycodes"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": "Keep this minimal and robust. The PDF requires monitoring keyboard entries, but does not specify rich text reconstruction. Avoid privacy feature work unless explicitly required."
+    },
+    {
+      "id": "US-006",
+      "title": "Capture full-screen screenshot per event",
+      "description": "As the system, I want to capture a full-screen screenshot for each recorded event.",
+      "acceptanceCriteria": [
+        "On each recorded event, a full-screen screenshot is captured",
+        "Screenshot is saved to disk as a PNG (or similar lossless format)",
+        "File path is stored alongside the event/step metadata",
+        "Failure to capture is handled gracefully (event still recorded with error flag)"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": "Candidate crates: `screenshots`/`screenshots-rs` or `xcap`. Choose one quickly and prove it works (multi-monitor perfection is not required for MVP)."
+    },
+    {
+      "id": "US-007",
+      "title": "Capture click crop screenshot per event",
+      "description": "As the system, I want to capture a click crop image for each event, approximating the UI element region.",
+      "acceptanceCriteria": [
+        "A crop image is generated per click event centered around click coordinates",
+        "Crop stays within screen bounds (clamped at edges)",
+        "Crop is saved to disk and linked in step metadata",
+        "Crop size is a constant (e.g., 400x300) and documented"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": "Interpret 'click crop of the UI element' as a fixed-size crop around the click point. True element detection is out-of-scope; document this tradeoff."
+    },
+    {
+      "id": "US-008",
+      "title": "Capture window crop screenshot per event (best-effort)",
+      "description": "As the system, I want to capture a window-cropped screenshot for each event based on the active window bounds.",
+      "acceptanceCriteria": [
+        "Attempts to determine the active window bounds at event time",
+        "If bounds are available, crops and saves window image and stores path",
+        "If bounds are unavailable, still produces a 'window' image via fallback and records `windowCropFallback: true`",
+        "Does not block event capture even if window bounds lookup is slow"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": "This is OS-specific and risky. Provide a robust fallback (e.g., duplicate full screenshot as window image) to ensure 3 images exist per event."
+    },
+    {
+      "id": "US-009",
+      "title": "Persist recording session to local filesystem (JSON + images)",
+      "description": "As the system, I want to save each recording session locally so it can be reviewed after recording stops.",
+      "acceptanceCriteria": [
+        "Creates a recording directory per session (e.g., `recordings/<id>/`)",
+        "Saves screenshots under `recordings/<id>/shots/`",
+        "Writes a `recording.json` containing steps/events and screenshot paths",
+        "Recording can be loaded after app restart"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": "Prefer JSON for speed. Structure the schema to allow future SQLite migration if desired. Keep writes safe (atomic rewrite on save is OK for this scope)."
+    },
+    {
+      "id": "US-010",
+      "title": "Load a completed recording for review",
+      "description": "As a user, I want to load the completed recording session and see the list of captured steps.",
+      "acceptanceCriteria": [
+        "After Stop Recording, frontend loads the session via a Rust command",
+        "Displays a list of steps/events in chronological order",
+        "Selecting a step shows its metadata and associated screenshot paths",
+        "UI works without real-time streaming (load on stop is sufficient)"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "This begins the should-have layer only after must-haves are stable. Avoid event streaming complexity for MVP."
+    },
+    {
+      "id": "US-011",
+      "title": "Parse events into discernible steps (minimum viable)",
+      "description": "As a user, I want actions represented as clear steps that can be reviewed and annotated.",
+      "acceptanceCriteria": [
+        "A 'Step' model exists and is used in the UI",
+        "Minimum viable parsing: 1 input event becomes 1 step with consistent fields",
+        "Each step includes timestamp, event type, and the 3 screenshot links",
+        "Document that richer grouping/inference is deferred"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "Define 'discernible' as a consistent, inspectable structure rather than advanced inference. More intelligent grouping belongs in nice-to-haves."
+    },
+    {
+      "id": "US-012",
+      "title": "Annotate steps with title and description",
+      "description": "As a user, I want to add a title and description to each step so the workflow is understandable.",
+      "acceptanceCriteria": [
+        "User can edit a step title and description in the UI",
+        "Edits are saved back to local storage (JSON) and persist across app restarts",
+        "Saving does not break existing screenshot paths",
+        "Basic validation: title optional, description optional, no crashes on empty strings"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "Persist annotations by rewriting the recording JSON on save. This is acceptable for the expected take-home scale."
+    },
+    {
+      "id": "US-013",
+      "title": "Classify action type per step (click/type/wait/assert)",
+      "description": "As a user, I want to classify each step by action type to support downstream automation understanding.",
+      "acceptanceCriteria": [
+        "Each step has an actionType field with allowed values: click, type, wait, assert",
+        "Default actionType is inferred from event type (mouse -> click, keyboard -> type)",
+        "User can manually override actionType via dropdown",
+        "Classification is saved and persists across app restarts"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "Do not implement automatic wait/assert inference for MVP; allow manual selection."
+    },
+    {
+      "id": "US-014",
+      "title": "Auto-group consecutive text input into a single action (optional)",
+      "description": "As a user, I want typing to appear as a single step instead of many individual key events.",
+      "acceptanceCriteria": [
+        "Consecutive key events within a short window (e.g., 500ms) are grouped",
+        "Grouped step stores the combined text (when available) or a representative summary",
+        "Grouping does not affect click events",
+        "Feature can be disabled easily if it causes instability"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "Nice-to-have. Only attempt after must-haves + should-haves are stable. If key capture is only keycodes, grouping can be limited or skipped."
+    },
+    {
+      "id": "US-015",
+      "title": "Keyboard shortcut support for start/stop recording (optional)",
+      "description": "As a user, I want a keyboard shortcut to start/stop recording without clicking the UI button.",
+      "acceptanceCriteria": [
+        "A documented shortcut toggles start/stop recording",
+        "Shortcut works while app is not focused (if feasible)",
+        "Does not interfere with global input capture stability",
+        "If global hotkey registration is complex on the target OS, feature is safely omitted"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "Nice-to-have. Only attempt if time remains and core capture pipeline is reliable."
+    },
+    {
+      "id": "US-016",
+      "title": "README and walkthrough deliverables",
+      "description": "As a reviewer, I want clear setup instructions, tradeoffs, and a brief walkthrough to evaluate the submission.",
+      "acceptanceCriteria": [
+        "README includes setup steps to run locally",
+        "README clearly states what shipped vs what was cut",
+        "README explains key technical decisions and tradeoffs",
+        "README includes AI usage notes and examples",
+        "A brief walkthrough (video or written) is included and referenced"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": "Treat this as a required deliverable. Keep it crisp and honest; highlight prioritization decisions and known limitations (e.g., window bounds best-effort)."
+    }
+  ]
+}
