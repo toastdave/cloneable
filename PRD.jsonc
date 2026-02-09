@@ -168,8 +168,8 @@
         "Basic validation: title optional, description optional, no crashes on empty strings"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": "Persist annotations by rewriting the recording JSON on save. This is acceptable for the expected take-home scale."
+      "passes": true,
+      "notes": "Added title/description fields to steps with an edit form in the detail panel. Saving invokes a Tauri command that rewrites recording.json for the session, preserving screenshot paths and allowing empty strings."
     },
     {
       "id": "US-013",

@@ -57,3 +57,8 @@
 - Decisions: define a backend Step model with consistent fields; build steps from click/key events on stop and backfill on load if missing; keep UI rendering step-based with generic labels to avoid over-inference.
 - Files changed: src-tauri/src/lib.rs, src/App.tsx, PRD.jsonc, progress.txt.
 - Blockers/notes: steps do not yet include annotation or actionType; follow-ups in US-012/US-013.
+
+- Task completed: US-012 annotate steps with title and description.
+- Decisions: store title/description on Step model with serde defaults; add a Tauri command to update annotations and rewrite recording.json; update UI detail panel with editable fields and save button while preserving screenshot paths.
+- Files changed: src-tauri/src/lib.rs, src/App.tsx, src/App.css, PRD.jsonc, progress.txt.
+- Blockers/notes: actionType classification still pending (US-013).

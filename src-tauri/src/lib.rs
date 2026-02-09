@@ -53,6 +53,10 @@ struct Step {
     window_crop_path: Option<String>,
     window_crop_fallback: bool,
     click_crop_path: Option<String>,
+    #[serde(default)]
+    title: Option<String>,
+    #[serde(default)]
+    description: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -216,6 +220,8 @@ fn build_steps(click_events: &[ClickEvent], key_events: &[KeyEvent]) -> Vec<Step
             window_crop_path: event.window_crop_path.clone(),
             window_crop_fallback: event.window_crop_fallback,
             click_crop_path: event.click_crop_path.clone(),
+            title: None,
+            description: None,
         });
     }
     for (index, event) in key_events.iter().enumerate() {
@@ -227,6 +233,8 @@ fn build_steps(click_events: &[ClickEvent], key_events: &[KeyEvent]) -> Vec<Step
             window_crop_path: event.window_crop_path.clone(),
             window_crop_fallback: event.window_crop_fallback,
             click_crop_path: None,
+            title: None,
+            description: None,
         });
     }
     steps.sort_by_key(|step| step.timestamp_ms);
@@ -519,6 +527,39 @@ fn load_recording(
     Ok(recording)
 }
 
+#[tauri::command]
+fn update_step_annotations(
+    app_handle: tauri::AppHandle,
+    session_id: String,
+    step_id: String,
+    title: Option<String>,
+    description: Option<String>,
+) -> Result<Step, String> {
+    let base_dir = app_handle
+        .path()
+        .app_data_dir()
+        .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    let recording_dir = base_dir.join("recordings").join(&session_id);
+    let recording_path = recording_dir.join("recording.json");
+    let payload = fs::read(&recording_path)
+        .map_err(|error| format!("Recording JSON read failed: {error}"))?;
+    let mut recording = serde_json::from_slice::<RecordingSession>(&payload)
+        .map_err(|error| format!("Recording JSON parse failed: {error}"))?;
+    if recording.steps.is_empty() {
+        recording.steps = build_steps(&recording.click_events, &recording.key_events);
+    }
+    let step = recording
+        .steps
+        .iter_mut()
+        .find(|step| step.id == step_id)
+        .ok_or_else(|| "Step not found".to_string())?;
+    step.title = title;
+    step.description = description;
+    let updated_step = step.clone();
+    write_recording_json(&recording_dir, &recording)?;
+    Ok(updated_step)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let recorder_state = Arc::new(Mutex::new(RecorderState::new()));
@@ -530,7 +571,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             start_recording,
             stop_recording,
-            load_recording
+            load_recording,
+            update_step_annotations
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

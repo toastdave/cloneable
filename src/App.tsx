@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { invoke } from "@tauri-apps/api/core";
 
@@ -36,6 +36,8 @@ type RecordingStep = {
   window_crop_path: string | null;
   window_crop_fallback: boolean;
   click_crop_path: string | null;
+  title?: string | null;
+  description?: string | null;
 };
 
 type RecordingSession = {
@@ -60,6 +62,8 @@ type DisplayStep = {
   timestamp_ms: number;
   headline: string;
   summary: string;
+  title: string;
+  description: string;
   fullScreenshot: string | null;
   windowScreenshot: string | null;
   windowFallback: boolean;
@@ -69,17 +73,26 @@ type DisplayStep = {
 function buildDisplaySteps(session: RecordingSession): DisplayStep[] {
   return [...session.steps]
     .sort((left, right) => left.timestamp_ms - right.timestamp_ms)
-    .map((step) => ({
-      id: step.id,
-      type: step.event_type,
-      timestamp_ms: step.timestamp_ms,
-      headline: step.event_type === "click" ? "Click" : "Key press",
-      summary: step.event_type === "click" ? "Mouse click" : "Keyboard input",
-      fullScreenshot: step.full_screenshot_path,
-      windowScreenshot: step.window_crop_path,
-      windowFallback: step.window_crop_fallback,
-      clickScreenshot: step.click_crop_path,
-    }));
+    .map((step) => {
+      const fallbackHeadline = step.event_type === "click" ? "Click" : "Key press";
+      const fallbackSummary =
+        step.event_type === "click" ? "Mouse click" : "Keyboard input";
+      const title = step.title ?? "";
+      const description = step.description ?? "";
+      return {
+        id: step.id,
+        type: step.event_type,
+        timestamp_ms: step.timestamp_ms,
+        headline: title.trim().length ? title : fallbackHeadline,
+        summary: description.trim().length ? description : fallbackSummary,
+        title,
+        description,
+        fullScreenshot: step.full_screenshot_path,
+        windowScreenshot: step.window_crop_path,
+        windowFallback: step.window_crop_fallback,
+        clickScreenshot: step.click_crop_path,
+      };
+    });
 }
 
 function formatTimestamp(timestampMs: number) {
@@ -94,6 +107,9 @@ function App() {
     null,
   );
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
+  const [draftTitle, setDraftTitle] = useState("");
+  const [draftDescription, setDraftDescription] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
   function getErrorMessage(error: unknown) {
     if (error instanceof Error) {
@@ -149,6 +165,59 @@ function App() {
     [loadedSession],
   );
   const selectedStep = steps.find((step) => step.id === selectedStepId) ?? null;
+
+  useEffect(() => {
+    if (!selectedStep) {
+      setDraftTitle("");
+      setDraftDescription("");
+      return;
+    }
+    setDraftTitle(selectedStep.title ?? "");
+    setDraftDescription(selectedStep.description ?? "");
+  }, [selectedStep]);
+
+  const hasAnnotationChanges =
+    selectedStep !== null &&
+    (draftTitle !== selectedStep.title ||
+      draftDescription !== selectedStep.description);
+
+  async function handleSaveAnnotations() {
+    if (!loadedSession || !selectedStep) {
+      return;
+    }
+    setErrorMessage(null);
+    setIsSaving(true);
+    try {
+      const updatedStep = await invoke<RecordingStep>("update_step_annotations", {
+        sessionId: loadedSession.session_id,
+        stepId: selectedStep.id,
+        title: draftTitle,
+        description: draftDescription,
+      });
+      setLoadedSession((previous) => {
+        if (!previous) {
+          return previous;
+        }
+        const updatedSteps = previous.steps.map((step) =>
+          step.id === updatedStep.id
+            ? {
+                ...step,
+                title: updatedStep.title ?? null,
+                description: updatedStep.description ?? null,
+              }
+            : step,
+        );
+        return {
+          ...previous,
+          steps: updatedSteps,
+        };
+      });
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+    } finally {
+      setIsSaving(false);
+    }
+  }
 
   return (
     <main className="app">
@@ -296,6 +365,40 @@ function App() {
                           </p>
                         </div>
                       ) : null}
+                    </div>
+                    <div className="detail-form">
+                      <label className="detail-field">
+                        <span className="detail-label">Title</span>
+                        <input
+                          className="detail-input"
+                          onChange={(event) => setDraftTitle(event.target.value)}
+                          placeholder="Add a short title"
+                          type="text"
+                          value={draftTitle}
+                        />
+                      </label>
+                      <label className="detail-field">
+                        <span className="detail-label">Description</span>
+                        <textarea
+                          className="detail-textarea"
+                          onChange={(event) =>
+                            setDraftDescription(event.target.value)
+                          }
+                          placeholder="Add supporting details"
+                          rows={4}
+                          value={draftDescription}
+                        />
+                      </label>
+                      <div className="detail-actions">
+                        <button
+                          className="btn btn-secondary"
+                          disabled={!hasAnnotationChanges || isSaving}
+                          onClick={handleSaveAnnotations}
+                          type="button"
+                        >
+                          {isSaving ? "Saving" : "Save annotations"}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ) : (

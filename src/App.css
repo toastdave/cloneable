@@ -169,6 +169,17 @@ h1 {
   box-shadow: 0 8px 18px rgba(28, 27, 25, 0.15);
 }
 
+.btn-secondary {
+  background: rgba(28, 27, 25, 0.08);
+  color: var(--ink);
+  border-color: rgba(28, 27, 25, 0.15);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(28, 27, 25, 0.12);
+}
+
 .footnote {
   margin: 0;
   color: var(--muted);
@@ -298,6 +309,48 @@ h1 {
 .detail-grid {
   display: grid;
   gap: 12px;
+}
+
+.detail-form {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(28, 27, 25, 0.1);
+  display: grid;
+  gap: 12px;
+}
+
+.detail-field {
+  display: grid;
+  gap: 6px;
+}
+
+.detail-input,
+.detail-textarea {
+  border-radius: 12px;
+  border: 1px solid rgba(28, 27, 25, 0.15);
+  padding: 10px 12px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  background: #fff;
+  color: var(--ink);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.detail-textarea {
+  resize: vertical;
+  min-height: 90px;
+}
+
+.detail-input:focus,
+.detail-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+.detail-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .detail-label {
