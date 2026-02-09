@@ -7,3 +7,8 @@
 - Decisions: ran `bun install` + `bun run build` to cover install and typecheck/build; skipped `bun run tauri dev` due to headless run.
 - Files changed: PRD.jsonc, progress.txt.
 - Blockers/notes: re-run `bun run tauri dev` on desktop to confirm window launch.
+
+- Task completed: US-003 Tauri start/stop command bridge.
+- Decisions: keep state in app-managed Mutex; use timestamp-based session id; surface errors in UI instead of silent failures.
+- Files changed: src-tauri/src/lib.rs, src/App.tsx, src/App.css, PRD.jsonc, progress.txt.
+- Blockers/notes: stop returns session id only; recording persistence wired in US-009.

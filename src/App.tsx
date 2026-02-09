@@ -1,15 +1,46 @@
 import { useState } from "react";
+
+import { invoke } from "@tauri-apps/api/core";
+
 import "./App.css";
 
 function App() {
   const [isRecording, setIsRecording] = useState(false);
+  const [recordingId, setRecordingId] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  function handleStartRecording() {
-    setIsRecording(true);
+  function getErrorMessage(error: unknown) {
+    if (error instanceof Error) {
+      return error.message;
+    }
+
+    if (typeof error === "string") {
+      return error;
+    }
+
+    return "Unable to update recording state.";
   }
 
-  function handleStopRecording() {
-    setIsRecording(false);
+  async function handleStartRecording() {
+    setErrorMessage(null);
+    try {
+      const sessionId = await invoke<string>("start_recording");
+      setRecordingId(sessionId);
+      setIsRecording(true);
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+    }
+  }
+
+  async function handleStopRecording() {
+    setErrorMessage(null);
+    try {
+      const sessionId = await invoke<string>("stop_recording");
+      setRecordingId(sessionId);
+      setIsRecording(false);
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+    }
   }
 
   return (
@@ -35,8 +66,17 @@ function App() {
             <p className="status-value">
               {isRecording ? "Recording" : "Idle"}
             </p>
+            {recordingId ? (
+              <p className="status-meta">Session: {recordingId}</p>
+            ) : null}
           </div>
         </div>
+
+        {errorMessage ? (
+          <p className="status-error" role="alert">
+            {errorMessage}
+          </p>
+        ) : null}
 
         <div className="controls">
           <button

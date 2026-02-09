@@ -42,8 +42,8 @@
         "Stop returns a recording identifier or path needed to load the recording for review"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": "Use Tauri `invoke()` from the React frontend. In Rust, store state in an `Arc<Mutex<...>>` (or equivalent) owned by the Tauri app state."
+      "passes": true,
+      "notes": "Added Tauri commands for start/stop with guarded state in app-managed Mutex; frontend now invokes `start_recording`/`stop_recording` and surfaces session id + errors."
     },
     {
       "id": "US-004",
