@@ -28,8 +28,8 @@
         "Start is disabled while recording and Stop is disabled while idle"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": "Keep UI minimal. If Tailwind/shadcn setup would slow progress, use basic HTML buttons first and style later. Must-have is functional controls."
+      "passes": true,
+      "notes": "Implemented a dedicated recorder panel with Start/Stop buttons, disabled states, and recording status indicator in the React UI. Styling is bespoke CSS; backend invoke wiring deferred to US-003."
     },
     {
       "id": "US-003",

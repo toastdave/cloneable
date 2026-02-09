@@ -1,0 +1,4 @@
+- Task completed: US-002 add Start/Stop UI controls.
+- Decisions: keep frontend-only state toggle; defer Tauri invoke wiring to US-003; bespoke CSS to make status obvious.
+- Files changed: src/App.tsx, src/App.css, PRD.jsonc.
+- Blockers/notes: backend start/stop not wired yet; no persistence yet.
