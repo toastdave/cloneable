@@ -70,8 +70,8 @@
         "If printable text capture is incomplete, key events still persist as keycodes"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": "Keep this minimal and robust. The PDF requires monitoring keyboard entries, but does not specify rich text reconstruction. Avoid privacy feature work unless explicitly required."
+      "passes": true,
+      "notes": "Added rdev key press capture in the global input listener and buffer events via channel while recording is active. Stores key code (Debug string); printable text capture is not available in rdev 0.5.3, so text reconstruction is intentionally deferred per MVP scope."
     },
     {
       "id": "US-006",

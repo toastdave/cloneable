@@ -17,3 +17,8 @@
 - Decisions: use rdev global listener; capture coordinates from latest mouse move; buffer via crossbeam channel; filter events by is_recording in worker thread.
 - Files changed: src-tauri/src/lib.rs, src-tauri/Cargo.toml, PRD.jsonc, progress.txt.
 - Blockers/notes: OS permissions (e.g., macOS accessibility) may still be required for global input capture.
+
+- Task completed: US-005 global keyboard entry capture.
+- Decisions: reuse existing rdev listener to avoid multiple global hooks; record key Debug string (no text event in rdev 0.5.3); buffer via channel to keep hook thread light.
+- Files changed: src-tauri/src/lib.rs, PRD.jsonc, progress.txt.
+- Blockers/notes: printable text capture not available with current rdev version; richer text reconstruction deferred.

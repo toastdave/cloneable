@@ -5,7 +5,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crossbeam_channel::unbounded;
 use rdev::EventType;
 
-#[allow(dead_code)]
 #[derive(Clone, Debug)]
 struct ClickEvent {
     timestamp_ms: u64,
@@ -13,10 +12,24 @@ struct ClickEvent {
     y: f64,
 }
 
+#[derive(Clone, Debug)]
+struct KeyEvent {
+    timestamp_ms: u64,
+    key: Option<String>,
+    text: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+enum InputEvent {
+    Click(ClickEvent),
+    Key(KeyEvent),
+}
+
 struct RecorderState {
     is_recording: bool,
     session_id: Option<String>,
     click_events: Vec<ClickEvent>,
+    key_events: Vec<KeyEvent>,
 }
 
 impl RecorderState {
@@ -25,6 +38,7 @@ impl RecorderState {
             is_recording: false,
             session_id: None,
             click_events: Vec::new(),
+            key_events: Vec::new(),
         }
     }
 }
@@ -44,18 +58,21 @@ fn now_millis() -> u64 {
         .unwrap_or(0)
 }
 
-fn spawn_global_click_listener(state: Arc<Mutex<RecorderState>>) {
-    let (sender, receiver) = unbounded::<ClickEvent>();
+fn spawn_global_input_listener(state: Arc<Mutex<RecorderState>>) {
+    let (sender, receiver) = unbounded::<InputEvent>();
 
     thread::spawn(move || {
-        for click in receiver.iter() {
+        for event in receiver.iter() {
             let mut state = match state.lock() {
                 Ok(locked) => locked,
                 Err(_) => continue,
             };
 
             if state.is_recording {
-                state.click_events.push(click);
+                match event {
+                    InputEvent::Click(click) => state.click_events.push(click),
+                    InputEvent::Key(key_event) => state.key_events.push(key_event),
+                }
             }
         }
     });
@@ -68,18 +85,25 @@ fn spawn_global_click_listener(state: Arc<Mutex<RecorderState>>) {
             }
             EventType::ButtonPress(_) => {
                 if let Some((x, y)) = last_position {
-                    let _ = sender.send(ClickEvent {
+                    let _ = sender.send(InputEvent::Click(ClickEvent {
                         timestamp_ms: now_millis(),
                         x,
                         y,
-                    });
+                    }));
                 }
+            }
+            EventType::KeyPress(key) => {
+                let _ = sender.send(InputEvent::Key(KeyEvent {
+                    timestamp_ms: now_millis(),
+                    key: Some(format!("{key:?}")),
+                    text: None,
+                }));
             }
             _ => {}
         });
 
         if let Err(error) = result {
-            eprintln!("Global click listener stopped: {error:?}");
+            eprintln!("Global input listener stopped: {error:?}");
         }
     });
 }
@@ -98,6 +122,7 @@ fn start_recording(state: tauri::State<Arc<Mutex<RecorderState>>>) -> Result<Str
     state.is_recording = true;
     state.session_id = Some(session_id.clone());
     state.click_events.clear();
+    state.key_events.clear();
 
     Ok(session_id)
 }
@@ -119,7 +144,7 @@ fn stop_recording(state: tauri::State<Arc<Mutex<RecorderState>>>) -> Result<Stri
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let recorder_state = Arc::new(Mutex::new(RecorderState::new()));
-    spawn_global_click_listener(recorder_state.clone());
+    spawn_global_input_listener(recorder_state.clone());
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
