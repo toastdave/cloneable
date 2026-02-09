@@ -225,8 +225,8 @@
         "A brief walkthrough (video or written) is included and referenced"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": "Treat this as a required deliverable. Keep it crisp and honest; highlight prioritization decisions and known limitations (e.g., window bounds best-effort)."
+      "passes": true,
+      "notes": "Expanded README with setup/build commands, shipped vs cut, tradeoffs, data format, written walkthrough, and AI usage notes."
     }
   ]
 }

@@ -42,3 +42,8 @@
 - Decisions: write recording.json with click/key event arrays + timestamps; save via temp file then rename for atomicity; block starting a new recording if previous session is unsaved.
 - Files changed: src-tauri/src/lib.rs, PRD.jsonc, progress.txt.
 - Blockers/notes: if save fails, stop returns error and keeps session data in memory; retry stop to re-save after fixing filesystem issue.
+
+- Task completed: US-016 README and walkthrough deliverables.
+- Decisions: keep README concise; document shipped vs cut scope; use written walkthrough to avoid video requirement; include AI usage notes explicitly.
+- Files changed: README.md, PRD.jsonc, progress.txt.
+- Blockers/notes: none.
