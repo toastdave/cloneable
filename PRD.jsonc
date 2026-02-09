@@ -84,8 +84,8 @@
         "Failure to capture is handled gracefully (event still recorded with error flag)"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": "Candidate crates: `screenshots`/`screenshots-rs` or `xcap`. Choose one quickly and prove it works (multi-monitor perfection is not required for MVP)."
+      "passes": true,
+      "notes": "Implemented full-screen capture with the `screenshots` crate. Each input event captures a PNG into `recordings/<session>/shots/` (app data dir), storing the path or an error string on the event. Multi-monitor handling is best-effort (primary screen capture only)."
     },
     {
       "id": "US-007",

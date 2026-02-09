@@ -22,3 +22,8 @@
 - Decisions: reuse existing rdev listener to avoid multiple global hooks; record key Debug string (no text event in rdev 0.5.3); buffer via channel to keep hook thread light.
 - Files changed: src-tauri/src/lib.rs, PRD.jsonc, progress.txt.
 - Blockers/notes: printable text capture not available with current rdev version; richer text reconstruction deferred.
+
+- Task completed: US-006 full-screen screenshot per event.
+- Decisions: use `screenshots` crate with primary screen capture; store PNGs under app data `recordings/<session>/shots` and attach path/error to each event; keep capture in worker thread to avoid blocking hook callback.
+- Files changed: src-tauri/src/lib.rs, src-tauri/Cargo.toml, PRD.jsonc, progress.txt.
+- Blockers/notes: capture is best-effort and tied to primary screen only; screenshot crate has future-incompatibility warning noted by cargo.
