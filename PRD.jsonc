@@ -56,8 +56,8 @@
         "Click events are buffered/queued safely without blocking the hook thread"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": "Candidate crate: `rdev` (cross-platform global event listening). Validate early: this is a core risk area. If permissions are needed (e.g., macOS accessibility), document them in README."
+      "passes": true,
+      "notes": "Implemented a background rdev listener + channel worker that records click timestamps and last-known mouse coordinates only while recording is active. Uses buffered channel to keep hook work minimal; note that OS-level permissions (e.g., macOS accessibility) may still be required."
     },
     {
       "id": "US-005",

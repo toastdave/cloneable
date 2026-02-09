@@ -12,3 +12,8 @@
 - Decisions: keep state in app-managed Mutex; use timestamp-based session id; surface errors in UI instead of silent failures.
 - Files changed: src-tauri/src/lib.rs, src/App.tsx, src/App.css, PRD.jsonc, progress.txt.
 - Blockers/notes: stop returns session id only; recording persistence wired in US-009.
+
+- Task completed: US-004 global mouse click capture in Rust backend.
+- Decisions: use rdev global listener; capture coordinates from latest mouse move; buffer via crossbeam channel; filter events by is_recording in worker thread.
+- Files changed: src-tauri/src/lib.rs, src-tauri/Cargo.toml, PRD.jsonc, progress.txt.
+- Blockers/notes: OS permissions (e.g., macOS accessibility) may still be required for global input capture.
