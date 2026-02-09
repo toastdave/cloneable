@@ -62,3 +62,8 @@
 - Decisions: store title/description on Step model with serde defaults; add a Tauri command to update annotations and rewrite recording.json; update UI detail panel with editable fields and save button while preserving screenshot paths.
 - Files changed: src-tauri/src/lib.rs, src/App.tsx, src/App.css, PRD.jsonc, progress.txt.
 - Blockers/notes: actionType classification still pending (US-013).
+
+- Task completed: US-013 classify action type per step.
+- Decisions: add ActionType enum on steps with defaults inferred from event type; UI exposes dropdown override and persists via existing update command; keep wait/assert manual-only.
+- Files changed: src-tauri/src/lib.rs, src/App.tsx, src/App.css, PRD.jsonc, progress.txt.
+- Blockers/notes: none.

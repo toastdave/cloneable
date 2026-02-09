@@ -45,9 +45,20 @@ enum StepEventType {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum ActionType {
+    Click,
+    Type,
+    Wait,
+    Assert,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 struct Step {
     id: String,
     event_type: StepEventType,
+    #[serde(default)]
+    action_type: Option<ActionType>,
     timestamp_ms: u64,
     full_screenshot_path: Option<String>,
     window_crop_path: Option<String>,
@@ -215,6 +226,7 @@ fn build_steps(click_events: &[ClickEvent], key_events: &[KeyEvent]) -> Vec<Step
         steps.push(Step {
             id: format!("click-{}-{}", event.timestamp_ms, index),
             event_type: StepEventType::Click,
+            action_type: Some(ActionType::Click),
             timestamp_ms: event.timestamp_ms,
             full_screenshot_path: event.full_screenshot_path.clone(),
             window_crop_path: event.window_crop_path.clone(),
@@ -228,6 +240,7 @@ fn build_steps(click_events: &[ClickEvent], key_events: &[KeyEvent]) -> Vec<Step
         steps.push(Step {
             id: format!("key-{}-{}", event.timestamp_ms, index),
             event_type: StepEventType::Key,
+            action_type: Some(ActionType::Type),
             timestamp_ms: event.timestamp_ms,
             full_screenshot_path: event.full_screenshot_path.clone(),
             window_crop_path: event.window_crop_path.clone(),
@@ -239,6 +252,18 @@ fn build_steps(click_events: &[ClickEvent], key_events: &[KeyEvent]) -> Vec<Step
     }
     steps.sort_by_key(|step| step.timestamp_ms);
     steps
+}
+
+fn normalize_step_action_types(steps: &mut [Step]) {
+    for step in steps.iter_mut() {
+        if step.action_type.is_some() {
+            continue;
+        }
+        step.action_type = Some(match step.event_type {
+            StepEventType::Click => ActionType::Click,
+            StepEventType::Key => ActionType::Type,
+        });
+    }
 }
 
 fn write_recording_json(
@@ -524,6 +549,7 @@ fn load_recording(
     if recording.steps.is_empty() {
         recording.steps = build_steps(&recording.click_events, &recording.key_events);
     }
+    normalize_step_action_types(&mut recording.steps);
     Ok(recording)
 }
 
@@ -534,6 +560,7 @@ fn update_step_annotations(
     step_id: String,
     title: Option<String>,
     description: Option<String>,
+    action_type: Option<ActionType>,
 ) -> Result<Step, String> {
     let base_dir = app_handle
         .path()
@@ -548,6 +575,7 @@ fn update_step_annotations(
     if recording.steps.is_empty() {
         recording.steps = build_steps(&recording.click_events, &recording.key_events);
     }
+    normalize_step_action_types(&mut recording.steps);
     let step = recording
         .steps
         .iter_mut()
@@ -555,6 +583,9 @@ fn update_step_annotations(
         .ok_or_else(|| "Step not found".to_string())?;
     step.title = title;
     step.description = description;
+    if action_type.is_some() {
+        step.action_type = action_type;
+    }
     let updated_step = step.clone();
     write_recording_json(&recording_dir, &recording)?;
     Ok(updated_step)

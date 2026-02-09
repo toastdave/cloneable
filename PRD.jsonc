@@ -182,8 +182,8 @@
         "Classification is saved and persists across app restarts"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": "Do not implement automatic wait/assert inference for MVP; allow manual selection."
+      "passes": true,
+      "notes": "Added actionType on steps with defaults inferred from event type. UI includes a manual dropdown to override and persists changes via Tauri command; wait/assert remain manual only."
     },
     {
       "id": "US-014",

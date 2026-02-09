@@ -325,7 +325,8 @@ h1 {
 }
 
 .detail-input,
-.detail-textarea {
+.detail-textarea,
+.detail-select {
   border-radius: 12px;
   border: 1px solid rgba(28, 27, 25, 0.15);
   padding: 10px 12px;
@@ -336,13 +337,25 @@ h1 {
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
+.detail-select {
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 18px) 50%, calc(100% - 12px) 50%;
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+  padding-right: 36px;
+}
+
 .detail-textarea {
   resize: vertical;
   min-height: 90px;
 }
 
 .detail-input:focus,
-.detail-textarea:focus {
+.detail-textarea:focus,
+.detail-select:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--ring);

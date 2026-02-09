@@ -38,6 +38,7 @@ type RecordingStep = {
   click_crop_path: string | null;
   title?: string | null;
   description?: string | null;
+  action_type?: "click" | "type" | "wait" | "assert" | null;
 };
 
 type RecordingSession = {
@@ -59,6 +60,7 @@ type StopRecordingResult = {
 type DisplayStep = {
   id: string;
   type: "click" | "key";
+  actionType: "click" | "type" | "wait" | "assert";
   timestamp_ms: number;
   headline: string;
   summary: string;
@@ -77,11 +79,13 @@ function buildDisplaySteps(session: RecordingSession): DisplayStep[] {
       const fallbackHeadline = step.event_type === "click" ? "Click" : "Key press";
       const fallbackSummary =
         step.event_type === "click" ? "Mouse click" : "Keyboard input";
+      const fallbackActionType = step.event_type === "click" ? "click" : "type";
       const title = step.title ?? "";
       const description = step.description ?? "";
       return {
         id: step.id,
         type: step.event_type,
+        actionType: step.action_type ?? fallbackActionType,
         timestamp_ms: step.timestamp_ms,
         headline: title.trim().length ? title : fallbackHeadline,
         summary: description.trim().length ? description : fallbackSummary,
@@ -109,6 +113,9 @@ function App() {
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
   const [draftDescription, setDraftDescription] = useState("");
+  const [draftActionType, setDraftActionType] = useState<
+    "click" | "type" | "wait" | "assert"
+  >("click");
   const [isSaving, setIsSaving] = useState(false);
 
   function getErrorMessage(error: unknown) {
@@ -170,16 +177,19 @@ function App() {
     if (!selectedStep) {
       setDraftTitle("");
       setDraftDescription("");
+      setDraftActionType("click");
       return;
     }
     setDraftTitle(selectedStep.title ?? "");
     setDraftDescription(selectedStep.description ?? "");
+    setDraftActionType(selectedStep.actionType);
   }, [selectedStep]);
 
   const hasAnnotationChanges =
     selectedStep !== null &&
     (draftTitle !== selectedStep.title ||
-      draftDescription !== selectedStep.description);
+      draftDescription !== selectedStep.description ||
+      draftActionType !== selectedStep.actionType);
 
   async function handleSaveAnnotations() {
     if (!loadedSession || !selectedStep) {
@@ -193,6 +203,7 @@ function App() {
         stepId: selectedStep.id,
         title: draftTitle,
         description: draftDescription,
+        actionType: draftActionType,
       });
       setLoadedSession((previous) => {
         if (!previous) {
@@ -204,6 +215,7 @@ function App() {
                 ...step,
                 title: updatedStep.title ?? null,
                 description: updatedStep.description ?? null,
+                action_type: updatedStep.action_type ?? draftActionType,
               }
             : step,
         );
@@ -335,6 +347,12 @@ function App() {
                         </p>
                       </div>
                       <div>
+                        <p className="detail-label">Action type</p>
+                        <p className="detail-value">
+                          {selectedStep.actionType.toUpperCase()}
+                        </p>
+                      </div>
+                      <div>
                         <p className="detail-label">Timestamp</p>
                         <p className="detail-value">
                           {formatTimestamp(selectedStep.timestamp_ms)}
@@ -376,6 +394,27 @@ function App() {
                           type="text"
                           value={draftTitle}
                         />
+                      </label>
+                      <label className="detail-field">
+                        <span className="detail-label">Action type</span>
+                        <select
+                          className="detail-select"
+                          onChange={(event) =>
+                            setDraftActionType(
+                              event.currentTarget.value as
+                                | "click"
+                                | "type"
+                                | "wait"
+                                | "assert",
+                            )
+                          }
+                          value={draftActionType}
+                        >
+                          <option value="click">Click</option>
+                          <option value="type">Type</option>
+                          <option value="wait">Wait</option>
+                          <option value="assert">Assert</option>
+                        </select>
                       </label>
                       <label className="detail-field">
                         <span className="detail-label">Description</span>
