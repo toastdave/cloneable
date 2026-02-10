@@ -100,6 +100,8 @@ pub fn start(state: &RecorderState, base_dir: &PathBuf) -> Result<String, AppErr
 
     let listener_handle = thread::spawn(move || {
         // rdev::listen blocks forever. The callback filters by the recording flag.
+        let mut shift_down = false;
+        let mut caps_lock = false;
         let _ = rdev::listen(move |event: rdev::Event| {
             if !listener_flag.load(Ordering::Relaxed) {
                 return;
@@ -123,8 +125,14 @@ pub fn start(state: &RecorderState, base_dir: &PathBuf) -> Result<String, AppErr
                 }
                 rdev::EventType::KeyPress(key) => {
                     let (mx, my) = *listener_mouse_pos.lock().unwrap_or_else(|e| e.into_inner());
+                    if matches!(key, rdev::Key::ShiftLeft | rdev::Key::ShiftRight) {
+                        shift_down = true;
+                    }
+                    if matches!(key, rdev::Key::CapsLock) {
+                        caps_lock = !caps_lock;
+                    }
                     let character = if cfg!(target_os = "macos") {
-                        None
+                        key_to_us_char(key, shift_down, caps_lock)
                     } else {
                         event.name.clone()
                     };
@@ -138,6 +146,11 @@ pub fn start(state: &RecorderState, base_dir: &PathBuf) -> Result<String, AppErr
                         }),
                     };
                     let _ = listener_tx.send(raw);
+                }
+                rdev::EventType::KeyRelease(key) => {
+                    if matches!(key, rdev::Key::ShiftLeft | rdev::Key::ShiftRight) {
+                        shift_down = false;
+                    }
                 }
                 _ => {}
             }
@@ -330,4 +343,219 @@ pub fn stop(state: &RecorderState) -> Result<String, AppError> {
     );
 
     Ok(session_path)
+}
+
+fn key_to_us_char(key: rdev::Key, shift_down: bool, caps_lock: bool) -> Option<String> {
+    let is_upper = shift_down ^ caps_lock;
+    let letter = match key {
+        rdev::Key::KeyA => Some('a'),
+        rdev::Key::KeyB => Some('b'),
+        rdev::Key::KeyC => Some('c'),
+        rdev::Key::KeyD => Some('d'),
+        rdev::Key::KeyE => Some('e'),
+        rdev::Key::KeyF => Some('f'),
+        rdev::Key::KeyG => Some('g'),
+        rdev::Key::KeyH => Some('h'),
+        rdev::Key::KeyI => Some('i'),
+        rdev::Key::KeyJ => Some('j'),
+        rdev::Key::KeyK => Some('k'),
+        rdev::Key::KeyL => Some('l'),
+        rdev::Key::KeyM => Some('m'),
+        rdev::Key::KeyN => Some('n'),
+        rdev::Key::KeyO => Some('o'),
+        rdev::Key::KeyP => Some('p'),
+        rdev::Key::KeyQ => Some('q'),
+        rdev::Key::KeyR => Some('r'),
+        rdev::Key::KeyS => Some('s'),
+        rdev::Key::KeyT => Some('t'),
+        rdev::Key::KeyU => Some('u'),
+        rdev::Key::KeyV => Some('v'),
+        rdev::Key::KeyW => Some('w'),
+        rdev::Key::KeyX => Some('x'),
+        rdev::Key::KeyY => Some('y'),
+        rdev::Key::KeyZ => Some('z'),
+        _ => None,
+    };
+
+    if let Some(ch) = letter {
+        let mapped = if is_upper {
+            ch.to_ascii_uppercase()
+        } else {
+            ch
+        };
+        return Some(mapped.to_string());
+    }
+
+    let mapped = match key {
+        rdev::Key::Num1 => {
+            if shift_down {
+                "!"
+            } else {
+                "1"
+            }
+        }
+        rdev::Key::Num2 => {
+            if shift_down {
+                "@"
+            } else {
+                "2"
+            }
+        }
+        rdev::Key::Num3 => {
+            if shift_down {
+                "#"
+            } else {
+                "3"
+            }
+        }
+        rdev::Key::Num4 => {
+            if shift_down {
+                "$"
+            } else {
+                "4"
+            }
+        }
+        rdev::Key::Num5 => {
+            if shift_down {
+                "%"
+            } else {
+                "5"
+            }
+        }
+        rdev::Key::Num6 => {
+            if shift_down {
+                "^"
+            } else {
+                "6"
+            }
+        }
+        rdev::Key::Num7 => {
+            if shift_down {
+                "&"
+            } else {
+                "7"
+            }
+        }
+        rdev::Key::Num8 => {
+            if shift_down {
+                "*"
+            } else {
+                "8"
+            }
+        }
+        rdev::Key::Num9 => {
+            if shift_down {
+                "("
+            } else {
+                "9"
+            }
+        }
+        rdev::Key::Num0 => {
+            if shift_down {
+                ")"
+            } else {
+                "0"
+            }
+        }
+        rdev::Key::Space => " ",
+        rdev::Key::Tab => "\t",
+        rdev::Key::Return => "\n",
+        rdev::Key::Backspace => "\u{8}",
+        rdev::Key::BackQuote => {
+            if shift_down {
+                "~"
+            } else {
+                "`"
+            }
+        }
+        rdev::Key::Minus => {
+            if shift_down {
+                "_"
+            } else {
+                "-"
+            }
+        }
+        rdev::Key::Equal => {
+            if shift_down {
+                "+"
+            } else {
+                "="
+            }
+        }
+        rdev::Key::LeftBracket => {
+            if shift_down {
+                "{"
+            } else {
+                "["
+            }
+        }
+        rdev::Key::RightBracket => {
+            if shift_down {
+                "}"
+            } else {
+                "]"
+            }
+        }
+        rdev::Key::SemiColon => {
+            if shift_down {
+                ":"
+            } else {
+                ";"
+            }
+        }
+        rdev::Key::Quote => {
+            if shift_down {
+                "\""
+            } else {
+                "'"
+            }
+        }
+        rdev::Key::BackSlash | rdev::Key::IntlBackslash => {
+            if shift_down {
+                "|"
+            } else {
+                "\\"
+            }
+        }
+        rdev::Key::Comma => {
+            if shift_down {
+                "<"
+            } else {
+                ","
+            }
+        }
+        rdev::Key::Dot => {
+            if shift_down {
+                ">"
+            } else {
+                "."
+            }
+        }
+        rdev::Key::Slash => {
+            if shift_down {
+                "?"
+            } else {
+                "/"
+            }
+        }
+        rdev::Key::Kp0 => "0",
+        rdev::Key::Kp1 => "1",
+        rdev::Key::Kp2 => "2",
+        rdev::Key::Kp3 => "3",
+        rdev::Key::Kp4 => "4",
+        rdev::Key::Kp5 => "5",
+        rdev::Key::Kp6 => "6",
+        rdev::Key::Kp7 => "7",
+        rdev::Key::Kp8 => "8",
+        rdev::Key::Kp9 => "9",
+        rdev::Key::KpPlus => "+",
+        rdev::Key::KpMinus => "-",
+        rdev::Key::KpMultiply => "*",
+        rdev::Key::KpDivide => "/",
+        rdev::Key::KpReturn => "\n",
+        rdev::Key::KpDelete => ".",
+        _ => return None,
+    };
+
+    Some(mapped.to_string())
 }
