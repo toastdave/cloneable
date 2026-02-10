@@ -26,3 +26,6 @@ rdev = "0.5.3"
 crossbeam-channel = "0.5"
 screenshots = "0.8.10"
 image = "0.24"
+
+[patch.crates-io]
+rdev = { path = "vendor/rdev" }
