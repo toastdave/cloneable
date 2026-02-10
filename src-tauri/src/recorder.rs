@@ -123,13 +123,18 @@ pub fn start(state: &RecorderState, base_dir: &PathBuf) -> Result<String, AppErr
                 }
                 rdev::EventType::KeyPress(key) => {
                     let (mx, my) = *listener_mouse_pos.lock().unwrap_or_else(|e| e.into_inner());
+                    let character = if cfg!(target_os = "macos") {
+                        None
+                    } else {
+                        event.name.clone()
+                    };
                     let raw = RawInputEvent {
                         timestamp: Utc::now().to_rfc3339(),
                         kind: EventKind::Keypress,
                         coordinates: Some(Coordinates { x: mx, y: my }),
                         key_data: Some(KeyData {
                             key: format!("{:?}", key),
-                            character: event.name.clone(),
+                            character,
                         }),
                     };
                     let _ = listener_tx.send(raw);
@@ -317,10 +322,7 @@ pub fn stop(state: &RecorderState) -> Result<String, AppError> {
 
     inner.is_recording = false;
 
-    let session_path = session_dir
-        .to_str()
-        .unwrap_or_default()
-        .to_string();
+    let session_path = session_dir.to_str().unwrap_or_default().to_string();
 
     println!(
         "[recorder] session {} saved to {}",
