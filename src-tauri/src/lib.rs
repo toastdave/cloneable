@@ -65,6 +65,8 @@ struct Step {
     window_crop_fallback: bool,
     click_crop_path: Option<String>,
     #[serde(default)]
+    input_text: Option<String>,
+    #[serde(default)]
     title: Option<String>,
     #[serde(default)]
     description: Option<String>,
@@ -100,6 +102,7 @@ struct RecorderState {
 
 const CLICK_CROP_WIDTH: u32 = 400;
 const CLICK_CROP_HEIGHT: u32 = 300;
+const KEY_GROUP_WINDOW_MS: u64 = 500;
 
 impl RecorderState {
     fn new() -> Self {
@@ -220,6 +223,95 @@ fn capture_window_crop_screenshot(
     Ok((path, true))
 }
 
+fn build_key_group_text(group: &[KeyEvent]) -> Option<String> {
+    let mut text_parts: Vec<String> = Vec::new();
+    let mut key_parts: Vec<String> = Vec::new();
+    for event in group {
+        if let Some(text) = &event.text {
+            if !text.trim().is_empty() {
+                text_parts.push(text.clone());
+                continue;
+            }
+        }
+        if let Some(key) = &event.key {
+            if !key.trim().is_empty() {
+                key_parts.push(key.clone());
+            }
+        }
+    }
+
+    if !text_parts.is_empty() {
+        let mut combined = text_parts.join("");
+        if !key_parts.is_empty() {
+            combined.push(' ');
+            combined.push_str(&format!("[{}]", key_parts.join(" ")));
+        }
+        return Some(combined);
+    }
+
+    if !key_parts.is_empty() {
+        return Some(format!("Keys: {}", key_parts.join(" ")));
+    }
+
+    None
+}
+
+fn build_key_steps(key_events: &[KeyEvent]) -> Vec<Step> {
+    let mut sorted_events = key_events.to_vec();
+    sorted_events.sort_by_key(|event| event.timestamp_ms);
+    let mut steps = Vec::new();
+    let mut current_group: Vec<KeyEvent> = Vec::new();
+    let mut group_index = 0;
+
+    for event in sorted_events.into_iter() {
+        if let Some(last) = current_group.last() {
+            let delta = event.timestamp_ms.saturating_sub(last.timestamp_ms);
+            if delta <= KEY_GROUP_WINDOW_MS {
+                current_group.push(event);
+                continue;
+            }
+        }
+
+        if !current_group.is_empty() {
+            let step = build_key_step(&current_group, group_index);
+            steps.push(step);
+            group_index += 1;
+            current_group.clear();
+        }
+
+        current_group.push(event);
+    }
+
+    if !current_group.is_empty() {
+        steps.push(build_key_step(&current_group, group_index));
+    }
+
+    steps
+}
+
+fn build_key_step(group: &[KeyEvent], group_index: usize) -> Step {
+    let first = group
+        .first()
+        .expect("Key event group should include at least one event");
+    let last = group
+        .last()
+        .expect("Key event group should include at least one event");
+
+    Step {
+        id: format!("key-{}-{}", first.timestamp_ms, group_index),
+        event_type: StepEventType::Key,
+        action_type: Some(ActionType::Type),
+        timestamp_ms: last.timestamp_ms,
+        full_screenshot_path: last.full_screenshot_path.clone(),
+        window_crop_path: last.window_crop_path.clone(),
+        window_crop_fallback: last.window_crop_fallback,
+        click_crop_path: None,
+        input_text: build_key_group_text(group),
+        title: None,
+        description: None,
+    }
+}
+
 fn build_steps(click_events: &[ClickEvent], key_events: &[KeyEvent]) -> Vec<Step> {
     let mut steps = Vec::with_capacity(click_events.len() + key_events.len());
     for (index, event) in click_events.iter().enumerate() {
@@ -232,24 +324,13 @@ fn build_steps(click_events: &[ClickEvent], key_events: &[KeyEvent]) -> Vec<Step
             window_crop_path: event.window_crop_path.clone(),
             window_crop_fallback: event.window_crop_fallback,
             click_crop_path: event.click_crop_path.clone(),
+            input_text: None,
             title: None,
             description: None,
         });
     }
-    for (index, event) in key_events.iter().enumerate() {
-        steps.push(Step {
-            id: format!("key-{}-{}", event.timestamp_ms, index),
-            event_type: StepEventType::Key,
-            action_type: Some(ActionType::Type),
-            timestamp_ms: event.timestamp_ms,
-            full_screenshot_path: event.full_screenshot_path.clone(),
-            window_crop_path: event.window_crop_path.clone(),
-            window_crop_fallback: event.window_crop_fallback,
-            click_crop_path: None,
-            title: None,
-            description: None,
-        });
-    }
+
+    steps.extend(build_key_steps(key_events));
     steps.sort_by_key(|step| step.timestamp_ms);
     steps
 }
@@ -289,10 +370,11 @@ fn write_recording_json(
 
 fn spawn_global_input_listener(state: Arc<Mutex<RecorderState>>) {
     let (sender, receiver) = unbounded::<InputEvent>();
+    let state_for_events = Arc::clone(&state);
 
     thread::spawn(move || {
         for event in receiver.iter() {
-            let recorder_state = match state.lock() {
+            let recorder_state = match state_for_events.lock() {
                 Ok(locked) => locked,
                 Err(_) => continue,
             };
@@ -337,7 +419,7 @@ fn spawn_global_input_listener(state: Arc<Mutex<RecorderState>>) {
                         Err(error) => click.click_crop_error = Some(error),
                     }
 
-                    let mut recorder_state = match state.lock() {
+                    let mut recorder_state = match state_for_events.lock() {
                         Ok(locked) => locked,
                         Err(_) => continue,
                     };
@@ -370,7 +452,7 @@ fn spawn_global_input_listener(state: Arc<Mutex<RecorderState>>) {
                         Err(error) => key_event.window_crop_error = Some(error),
                     }
 
-                    let mut recorder_state = match state.lock() {
+                    let mut recorder_state = match state_for_events.lock() {
                         Ok(locked) => locked,
                         Err(_) => continue,
                     };
@@ -382,6 +464,7 @@ fn spawn_global_input_listener(state: Arc<Mutex<RecorderState>>) {
         }
     });
 
+    let state_for_listener = Arc::clone(&state);
     thread::spawn(move || {
         let mut last_position: Option<(f64, f64)> = None;
         let result = rdev::listen(move |event| match event.event_type {
@@ -422,7 +505,7 @@ fn spawn_global_input_listener(state: Arc<Mutex<RecorderState>>) {
         if let Err(error) = result {
             let message = format!("Global input listener stopped: {error:?}");
             eprintln!("{message}");
-            if let Ok(mut recorder_state) = state.lock() {
+            if let Ok(mut recorder_state) = state_for_listener.lock() {
                 recorder_state.listener_error = Some(message);
             }
         }
@@ -499,6 +582,8 @@ fn stop_recording(
     drop(recorder_state);
 
     let stopped_at_ms = now_millis();
+    let click_count = click_events.len();
+    let key_count = key_events.len();
     let steps = build_steps(&click_events, &key_events);
     let recording = RecordingSession {
         session_id: session_id.clone(),
@@ -523,8 +608,8 @@ fn stop_recording(
 
     Ok(StopRecordingResult {
         session_id,
-        click_count: click_events.len(),
-        key_count: key_events.len(),
+        click_count,
+        key_count,
         listener_error,
     })
 }

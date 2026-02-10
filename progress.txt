@@ -67,3 +67,8 @@
 - Decisions: add ActionType enum on steps with defaults inferred from event type; UI exposes dropdown override and persists via existing update command; keep wait/assert manual-only.
 - Files changed: src-tauri/src/lib.rs, src/App.tsx, src/App.css, PRD.jsonc, progress.txt.
 - Blockers/notes: none.
+
+- Task completed: US-014 auto-group consecutive text input into a single action.
+- Decisions: group key events within 500ms into one step; use combined text when present or fall back to a key summary string; attach screenshots from last event in the group for a closer visual state.
+- Files changed: src-tauri/src/lib.rs, src/App.tsx, PRD.jsonc, progress.txt.
+- Blockers/notes: rdev still provides no printable text, so grouped summaries use key names until text capture improves.

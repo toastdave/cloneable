@@ -36,6 +36,7 @@ type RecordingStep = {
   window_crop_path: string | null;
   window_crop_fallback: boolean;
   click_crop_path: string | null;
+  input_text?: string | null;
   title?: string | null;
   description?: string | null;
   action_type?: "click" | "type" | "wait" | "assert" | null;
@@ -76,9 +77,14 @@ function buildDisplaySteps(session: RecordingSession): DisplayStep[] {
   return [...session.steps]
     .sort((left, right) => left.timestamp_ms - right.timestamp_ms)
     .map((step) => {
-      const fallbackHeadline = step.event_type === "click" ? "Click" : "Key press";
+      const hasInputText = Boolean(step.input_text?.trim().length);
+      const fallbackHeadline = step.event_type === "click" ? "Click" : "Typing";
       const fallbackSummary =
-        step.event_type === "click" ? "Mouse click" : "Keyboard input";
+        step.event_type === "click"
+          ? "Mouse click"
+          : hasInputText
+            ? (step.input_text ?? "")
+            : "Keyboard input";
       const fallbackActionType = step.event_type === "click" ? "click" : "type";
       const title = step.title ?? "";
       const description = step.description ?? "";

@@ -196,8 +196,8 @@
         "Feature can be disabled easily if it causes instability"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": "Nice-to-have. Only attempt after must-haves + should-haves are stable. If key capture is only keycodes, grouping can be limited or skipped."
+      "passes": true,
+      "notes": "Grouped key events into a single step when consecutive events occur within 500ms. Step stores combined text when available or a key summary string, and click events remain untouched. Toggle-able by adjusting KEY_GROUP_WINDOW_MS."
     },
     {
       "id": "US-015",
