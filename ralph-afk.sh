@@ -24,7 +24,7 @@ for ((i=1; i<=$1; i++)); do
 Keep entries concise. Sacrifice grammar for the sake of concision. This file helps future iterations skip exploration.\
   5. Commit your changes using conventional commits. \
   ONLY WORK ON A SINGLE TASK. \
-  If the PRD is complete, output <promise>COMPLETE</promise>." | tee /dev/tty)
+  If the PRD is complete, output <promise>COMPLETE</promise>.")
 
   echo "$result"
 
