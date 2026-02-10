@@ -34,8 +34,8 @@ bun tauri build
 - On Linux, Wayland is not supported. Use an X11 session (e.g. GNOME on Xorg).
 
 ### Known bugs:
-- Screenshots happen once recording is stopped, not actually tracjed with event capture.
-- Crashes on keyboard input. This is specific to the `ralph` branhc, fixed in the `main` branch
+- Screenshots happen once recording is stopped, not actually tracked with event capture.
+- Crashes on keyboard input. This is specific to the `ralph` branch, fixed in the `main` branch
 
 ## Completed vs. Descoped
 
@@ -44,7 +44,7 @@ Completed:
 - Rust backend global input listener (clicks + keypresses).
 - Per-event capture of full screen, window crop (with fallback), and click crop.
 - Local storage of JSON + screenshots in session folders.
-- Minimal Step parsing
+- Minimal step parsing
 
 Descoped:
 - Step annotation (titles, descriptions, action types).
@@ -67,17 +67,17 @@ So I'd love to actually meet all of the requirements. But first thing I MUST do 
 ## AI Tooling
 
 Tools used:
-- Planning: ChatGPT vs Claude - pitted the two against each other to validate responses to the same prompts. Normally when I do this they start off a fair bit on different pages to slowly converging into a plan both agree on. Finally got ChatGPT output a PRD.jsonc that was used as reference for tasks for all agents.
+- Planning: ChatGPT vs Claude - pitted the two against each other to validate responses to the same prompts. Normally when I do this they start off on somewhat different pages and slowly converge into a plan both agree on. Finally I got ChatGPT to output a PRD.jsonc that was used as reference for tasks for all agents.
 - Implementation: 
-  - On the `main` branch, I used a frontend and backend Cursor agents. Each tackled the tasks in their category as I validated the plans, code chagnes, and tested the implementation. 
-  - On the `ralph` branch, I used my ralph shell scripts with the same prompt to knock tasks off the PRD one by one. This ran in the background completely in Opencode with ChatGPT 5.2 Codex. Agents did this almost 100% autonomously. I belive I tossed a build error and a crash log back in, but I thnk that's the extent I touched it.
+  - On the `main` branch, I used frontend and backend Cursor agents. Each tackled the tasks in their category as I validated the plans, code chagnes, and tested the implementation. 
+  - On the `ralph` branch, I used my ralph shell scripts with the same prompt to knock tasks off the PRD one by one. This ran in the background completely in Opencode with ChatGPT 5.2 Codex. Agents did this almost 100% autonomously. I belive I tossed a build error and a crash log back in, but I think that's the extent I touched it.
 - Skills: I've been testing out the skills more recently. There's a skills folder for specific tasks, each downlaoded from [Vercel Skills](https://skills.sh/). I'm still ironing out their impact.
 
 Where AI helped:
-- AI accelerated in basic all aspects of the project from planning to implementation and debugging. 
+- AI accelerated basically all aspects of the project from planning to implementation and debugging. 
 
-Where AI misled or required correction:
+Where AI misled or required correction:  
 I think this is something I'm normally much more aware of in the ecosystems I know well. Here I found more when testing. A couple issues to note:
-- The app crashes on Mac keyboard inputs. ChatGPT fixed this by patching the `rdev` crate, which was kinda insane to see, and then hardcoding the MacOS key character. I'm very hestitant to believe that popular crates can't adequately handle this. I'll have to dig into this more.
-- The events are listed post stopping the session and then the screenshots are captured for each event, all of the same screen that's not actually the event. I actually need to understand the rust implementation to iron this out.
-- In the planning phase, the models were getting pretty hung up on not capturing passwords. I had to nip that scope creep in the bud real quick. Security is important, but why do I need security if my app crashes on keyboard input?
+- The app crashes on Mac keyboard inputs. ChatGPT fixed this by patching the `rdev` crate, which was kinda insane to see, and then hardcoding the MacOS key characters. I'm very hestitant to believe that popular crates can't adequately handle this. I'll have to dig into this more.
+- The events are listed post stopping the session and then the screenshots are captured for each event, all of the same screen that's not actually the event. I need to better understand the rust implementation to iron this out.
+- In the planning phase, the models were getting pretty hung up on not capturing passwords. I had to nip that scope creep in the bud real quick. Security is important, but I just needed to figure out capturing events first.
