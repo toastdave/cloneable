@@ -1,6 +1,6 @@
 {
   "project": "Cloneable Workflow Recorder",
-  "branchName": "feature/workflow-recorder-mvp",
+  "branchName": "main",
   "description": "Build a Tauri desktop app (already scaffolded via `bun create tauri`) that records desktop workflow actions. Must-haves: a frontend Start/Stop recording control, a Rust backend that monitors global mouse clicks and keyboard entries, and capture 3 screenshots per event (full screen, window crop, click crop). Should-haves (only after must-haves work): parse events into discernible steps, allow annotation (title/description), and classify action type (click/type/wait/assert). Nice-to-haves: auto-group text input and keyboard shortcuts. Storage is local-only; prefer simple JSON + filesystem for speed, with clear tradeoffs documented in README.",
   "userStories": [
     {
