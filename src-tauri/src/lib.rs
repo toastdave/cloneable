@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -98,6 +99,14 @@ struct RecorderState {
     click_events: Vec<ClickEvent>,
     key_events: Vec<KeyEvent>,
     listener_error: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct RecordingShortcutPayload {
+    is_recording: bool,
+    session_id: Option<String>,
+    listener_error: Option<String>,
+    error: Option<String>,
 }
 
 const CLICK_CROP_WIDTH: u32 = 400;
@@ -368,7 +377,124 @@ fn write_recording_json(
     Ok(())
 }
 
-fn spawn_global_input_listener(state: Arc<Mutex<RecorderState>>) {
+fn start_recording_internal(
+    app_handle: &tauri::AppHandle,
+    state: &Arc<Mutex<RecorderState>>,
+) -> Result<String, String> {
+    let mut state = state
+        .lock()
+        .map_err(|_| "Recording state lock poisoned".to_string())?;
+
+    if state.is_recording {
+        return Err("Recording already in progress".to_string());
+    }
+    let has_pending = state.session_id.is_some()
+        && (!state.click_events.is_empty() || !state.key_events.is_empty());
+    if has_pending {
+        return Err("Previous recording not saved yet".to_string());
+    }
+
+    let session_id = new_session_id();
+    let base_dir = app_handle
+        .path()
+        .app_data_dir()
+        .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    let recording_dir = base_dir.join("recordings").join(&session_id);
+    let shots_dir = recording_dir.join("shots");
+    if let Err(error) = fs::create_dir_all(&shots_dir) {
+        eprintln!("Failed to create recordings dir: {error:?}");
+    }
+    state.is_recording = true;
+    state.session_id = Some(session_id.clone());
+    state.started_at_ms = Some(now_millis());
+    state.recording_dir = Some(recording_dir);
+    state.shots_dir = Some(shots_dir);
+    state.click_events.clear();
+    state.key_events.clear();
+    state.listener_error = None;
+
+    Ok(session_id)
+}
+
+fn stop_recording_internal(
+    state: &Arc<Mutex<RecorderState>>,
+) -> Result<StopRecordingResult, String> {
+    let mut recorder_state = state
+        .lock()
+        .map_err(|_| "Recording state lock poisoned".to_string())?;
+
+    let has_pending = recorder_state.session_id.is_some()
+        && (!recorder_state.click_events.is_empty() || !recorder_state.key_events.is_empty());
+    if !recorder_state.is_recording && !has_pending {
+        return Err("Recording is not active".to_string());
+    }
+
+    let session_id = recorder_state
+        .session_id
+        .clone()
+        .unwrap_or_else(new_session_id);
+    let started_at_ms = recorder_state.started_at_ms.unwrap_or_else(now_millis);
+    let recording_dir = recorder_state
+        .recording_dir
+        .clone()
+        .ok_or_else(|| "Recording directory not initialized".to_string())?;
+    let click_events = recorder_state.click_events.clone();
+    let key_events = recorder_state.key_events.clone();
+    let listener_error = recorder_state.listener_error.clone();
+    recorder_state.is_recording = false;
+    drop(recorder_state);
+
+    let stopped_at_ms = now_millis();
+    let click_count = click_events.len();
+    let key_count = key_events.len();
+    let steps = build_steps(&click_events, &key_events);
+    let recording = RecordingSession {
+        session_id: session_id.clone(),
+        started_at_ms,
+        stopped_at_ms,
+        click_events,
+        key_events,
+        steps,
+    };
+    let write_result = write_recording_json(&recording_dir, &recording);
+
+    let mut recorder_state = state
+        .lock()
+        .map_err(|_| "Recording state lock poisoned".to_string())?;
+    recorder_state.is_recording = false;
+    recorder_state.session_id = None;
+    recorder_state.started_at_ms = None;
+    recorder_state.recording_dir = None;
+    recorder_state.shots_dir = None;
+    recorder_state.click_events.clear();
+    recorder_state.key_events.clear();
+
+    write_result?;
+
+    Ok(StopRecordingResult {
+        session_id,
+        click_count,
+        key_count,
+        listener_error,
+    })
+}
+
+fn emit_shortcut_payload(app_handle: &tauri::AppHandle, payload: RecordingShortcutPayload) {
+    let _ = app_handle.emit("recording-shortcut", payload);
+}
+
+fn is_toggle_shortcut_pressed(pressed: &HashSet<rdev::Key>) -> bool {
+    let has_shift =
+        pressed.contains(&rdev::Key::ShiftLeft) || pressed.contains(&rdev::Key::ShiftRight);
+    let has_cmd_or_ctrl = pressed.contains(&rdev::Key::ControlLeft)
+        || pressed.contains(&rdev::Key::ControlRight)
+        || pressed.contains(&rdev::Key::MetaLeft)
+        || pressed.contains(&rdev::Key::MetaRight);
+    let has_r = pressed.contains(&rdev::Key::KeyR);
+    has_shift && has_cmd_or_ctrl && has_r
+}
+
+fn spawn_global_input_listener(app_handle: tauri::AppHandle, state: Arc<Mutex<RecorderState>>) {
     let (sender, receiver) = unbounded::<InputEvent>();
     let state_for_events = Arc::clone(&state);
 
@@ -465,8 +591,11 @@ fn spawn_global_input_listener(state: Arc<Mutex<RecorderState>>) {
     });
 
     let state_for_listener = Arc::clone(&state);
+    let app_handle_for_listener = app_handle.clone();
     thread::spawn(move || {
         let mut last_position: Option<(f64, f64)> = None;
+        let mut pressed_keys: HashSet<rdev::Key> = HashSet::new();
+        let mut shortcut_armed = false;
         let result = rdev::listen(move |event| match event.event_type {
             EventType::MouseMove { x, y } => {
                 last_position = Some((x, y));
@@ -488,6 +617,62 @@ fn spawn_global_input_listener(state: Arc<Mutex<RecorderState>>) {
                 }
             }
             EventType::KeyPress(key) => {
+                pressed_keys.insert(key);
+                if is_toggle_shortcut_pressed(&pressed_keys) && !shortcut_armed {
+                    shortcut_armed = true;
+                    let app_handle = app_handle_for_listener.clone();
+                    let toggle_state = Arc::clone(&state_for_listener);
+                    thread::spawn(move || {
+                        let is_recording = toggle_state
+                            .lock()
+                            .map(|state| state.is_recording)
+                            .unwrap_or(false);
+                        if is_recording {
+                            match stop_recording_internal(&toggle_state) {
+                                Ok(result) => emit_shortcut_payload(
+                                    &app_handle,
+                                    RecordingShortcutPayload {
+                                        is_recording: false,
+                                        session_id: Some(result.session_id),
+                                        listener_error: result.listener_error,
+                                        error: None,
+                                    },
+                                ),
+                                Err(error) => emit_shortcut_payload(
+                                    &app_handle,
+                                    RecordingShortcutPayload {
+                                        is_recording: false,
+                                        session_id: None,
+                                        listener_error: None,
+                                        error: Some(error),
+                                    },
+                                ),
+                            }
+                        } else {
+                            match start_recording_internal(&app_handle, &toggle_state) {
+                                Ok(session_id) => emit_shortcut_payload(
+                                    &app_handle,
+                                    RecordingShortcutPayload {
+                                        is_recording: true,
+                                        session_id: Some(session_id),
+                                        listener_error: None,
+                                        error: None,
+                                    },
+                                ),
+                                Err(error) => emit_shortcut_payload(
+                                    &app_handle,
+                                    RecordingShortcutPayload {
+                                        is_recording: false,
+                                        session_id: None,
+                                        listener_error: None,
+                                        error: Some(error),
+                                    },
+                                ),
+                            }
+                        }
+                    });
+                    return;
+                }
                 let _ = sender.send(InputEvent::Key(KeyEvent {
                     timestamp_ms: now_millis(),
                     key: Some(format!("{key:?}")),
@@ -498,6 +683,12 @@ fn spawn_global_input_listener(state: Arc<Mutex<RecorderState>>) {
                     window_crop_error: None,
                     window_crop_fallback: false,
                 }));
+            }
+            EventType::KeyRelease(key) => {
+                pressed_keys.remove(&key);
+                if !is_toggle_shortcut_pressed(&pressed_keys) {
+                    shortcut_armed = false;
+                }
             }
             _ => {}
         });
@@ -517,101 +708,14 @@ fn start_recording(
     app_handle: tauri::AppHandle,
     state: tauri::State<Arc<Mutex<RecorderState>>>,
 ) -> Result<String, String> {
-    let mut state = state
-        .lock()
-        .map_err(|_| "Recording state lock poisoned".to_string())?;
-
-    if state.is_recording {
-        return Err("Recording already in progress".to_string());
-    }
-    let has_pending = state.session_id.is_some()
-        && (!state.click_events.is_empty() || !state.key_events.is_empty());
-    if has_pending {
-        return Err("Previous recording not saved yet".to_string());
-    }
-
-    let session_id = new_session_id();
-    let base_dir = app_handle
-        .path()
-        .app_data_dir()
-        .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
-    let recording_dir = base_dir.join("recordings").join(&session_id);
-    let shots_dir = recording_dir.join("shots");
-    if let Err(error) = fs::create_dir_all(&shots_dir) {
-        eprintln!("Failed to create recordings dir: {error:?}");
-    }
-    state.is_recording = true;
-    state.session_id = Some(session_id.clone());
-    state.started_at_ms = Some(now_millis());
-    state.recording_dir = Some(recording_dir);
-    state.shots_dir = Some(shots_dir);
-    state.click_events.clear();
-    state.key_events.clear();
-    state.listener_error = None;
-
-    Ok(session_id)
+    start_recording_internal(&app_handle, state.inner())
 }
 
 #[tauri::command]
 fn stop_recording(
     state: tauri::State<Arc<Mutex<RecorderState>>>,
 ) -> Result<StopRecordingResult, String> {
-    let mut recorder_state = state
-        .lock()
-        .map_err(|_| "Recording state lock poisoned".to_string())?;
-
-    let has_pending = recorder_state.session_id.is_some()
-        && (!recorder_state.click_events.is_empty() || !recorder_state.key_events.is_empty());
-    if !recorder_state.is_recording && !has_pending {
-        return Err("Recording is not active".to_string());
-    }
-
-    let session_id = recorder_state
-        .session_id
-        .clone()
-        .unwrap_or_else(new_session_id);
-    let started_at_ms = recorder_state.started_at_ms.unwrap_or_else(now_millis);
-    let recording_dir = recorder_state
-        .recording_dir
-        .clone()
-        .ok_or_else(|| "Recording directory not initialized".to_string())?;
-    let click_events = recorder_state.click_events.clone();
-    let key_events = recorder_state.key_events.clone();
-    let listener_error = recorder_state.listener_error.clone();
-    recorder_state.is_recording = false;
-    drop(recorder_state);
-
-    let stopped_at_ms = now_millis();
-    let click_count = click_events.len();
-    let key_count = key_events.len();
-    let steps = build_steps(&click_events, &key_events);
-    let recording = RecordingSession {
-        session_id: session_id.clone(),
-        started_at_ms,
-        stopped_at_ms,
-        click_events,
-        key_events,
-        steps,
-    };
-    write_recording_json(&recording_dir, &recording)?;
-
-    let mut recorder_state = state
-        .lock()
-        .map_err(|_| "Recording state lock poisoned".to_string())?;
-    recorder_state.is_recording = false;
-    recorder_state.session_id = None;
-    recorder_state.started_at_ms = None;
-    recorder_state.recording_dir = None;
-    recorder_state.shots_dir = None;
-    recorder_state.click_events.clear();
-    recorder_state.key_events.clear();
-
-    Ok(StopRecordingResult {
-        session_id,
-        click_count,
-        key_count,
-        listener_error,
-    })
+    stop_recording_internal(state.inner())
 }
 
 #[tauri::command]
@@ -679,11 +783,14 @@ fn update_step_annotations(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let recorder_state = Arc::new(Mutex::new(RecorderState::new()));
-    spawn_global_input_listener(recorder_state.clone());
-
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(recorder_state)
+        .setup(|app| {
+            let state = app.state::<Arc<Mutex<RecorderState>>>().inner().clone();
+            spawn_global_input_listener(app.handle(), state);
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             start_recording,
             stop_recording,

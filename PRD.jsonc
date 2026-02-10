@@ -210,8 +210,8 @@
         "If global hotkey registration is complex on the target OS, feature is safely omitted"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": "Nice-to-have. Only attempt if time remains and core capture pipeline is reliable."
+      "passes": true,
+      "notes": "Added a global keyboard shortcut (Cmd/Ctrl + Shift + R) via the existing rdev listener. Shortcut toggles start/stop, emits a frontend event to sync UI, and is documented in the UI footnote."
     },
     {
       "id": "US-016",

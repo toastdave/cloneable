@@ -72,3 +72,8 @@
 - Decisions: group key events within 500ms into one step; use combined text when present or fall back to a key summary string; attach screenshots from last event in the group for a closer visual state.
 - Files changed: src-tauri/src/lib.rs, src/App.tsx, PRD.jsonc, progress.txt.
 - Blockers/notes: rdev still provides no printable text, so grouped summaries use key names until text capture improves.
+
+- Task completed: US-015 keyboard shortcut for start/stop (Cmd/Ctrl + Shift + R).
+- Decisions: reuse existing rdev global listener instead of new Tauri plugin; emit frontend event to sync UI + load session on stop; document shortcut inline in UI footnote.
+- Files changed: src-tauri/src/lib.rs, src/App.tsx, PRD.jsonc, progress.txt.
+- Blockers/notes: shortcut uses KeyR + Shift + Cmd/Ctrl detection; modifier key presses before combo may still be recorded as key events.

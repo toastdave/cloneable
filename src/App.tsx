@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 import "./App.css";
 
@@ -56,6 +57,13 @@ type StopRecordingResult = {
   click_count: number;
   key_count: number;
   listener_error: string | null;
+};
+
+type RecordingShortcutPayload = {
+  is_recording: boolean;
+  session_id: string | null;
+  listener_error: string | null;
+  error: string | null;
 };
 
 type DisplayStep = {
@@ -136,6 +144,25 @@ function App() {
     return "Unable to update recording state.";
   }
 
+  async function loadRecordingSession(
+    sessionId: string,
+    listenerError?: string | null,
+  ) {
+    const session = await invoke<RecordingSession>("load_recording", {
+      sessionId,
+    });
+    setLoadedSession(session);
+    const nextSteps = buildDisplaySteps(session);
+    setSelectedStepId(nextSteps[0]?.id ?? null);
+    if (listenerError) {
+      setErrorMessage(listenerError);
+    } else if (nextSteps.length === 0) {
+      setErrorMessage(
+        "No input events were captured. On Wayland compositors like Hyprland, global input capture may be blocked. Try an X11 session or ensure your user has permission to read input devices.",
+      );
+    }
+  }
+
   async function handleStartRecording() {
     setErrorMessage(null);
     try {
@@ -155,19 +182,7 @@ function App() {
       const result = await invoke<StopRecordingResult>("stop_recording");
       setRecordingId(result.session_id);
       setIsRecording(false);
-      const session = await invoke<RecordingSession>("load_recording", {
-        sessionId: result.session_id,
-      });
-      setLoadedSession(session);
-      const steps = buildDisplaySteps(session);
-      setSelectedStepId(steps[0]?.id ?? null);
-      if (result.listener_error) {
-        setErrorMessage(result.listener_error);
-      } else if (result.click_count + result.key_count === 0) {
-        setErrorMessage(
-          "No input events were captured. On Wayland compositors like Hyprland, global input capture may be blocked. Try an X11 session or ensure your user has permission to read input devices.",
-        );
-      }
+      await loadRecordingSession(result.session_id, result.listener_error);
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
     }
@@ -178,6 +193,43 @@ function App() {
     [loadedSession],
   );
   const selectedStep = steps.find((step) => step.id === selectedStepId) ?? null;
+
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    listen<RecordingShortcutPayload>("recording-shortcut", (event) => {
+      const payload = event.payload;
+      if (payload.error) {
+        setErrorMessage(payload.error);
+        return;
+      }
+      if (payload.is_recording) {
+        setIsRecording(true);
+        setRecordingId(payload.session_id ?? null);
+        setLoadedSession(null);
+        setSelectedStepId(null);
+        setErrorMessage(null);
+        return;
+      }
+      setIsRecording(false);
+      if (payload.session_id) {
+        setRecordingId(payload.session_id);
+        loadRecordingSession(payload.session_id, payload.listener_error).catch(
+          (error) => setErrorMessage(getErrorMessage(error)),
+        );
+      }
+    })
+      .then((unlistenFn) => {
+        unlisten = unlistenFn;
+      })
+      .catch(() => {
+        unlisten = null;
+      });
+    return () => {
+      if (unlisten) {
+        unlisten();
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!selectedStep) {
@@ -293,7 +345,7 @@ function App() {
 
         <p className="footnote">
           Recordings are stored locally on this device. You can stop at any time
-          to review the captured steps.
+          to review the captured steps. Shortcut: Cmd/Ctrl + Shift + R.
         </p>
 
         {loadedSession ? (
