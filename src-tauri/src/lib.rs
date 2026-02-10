@@ -10,7 +10,7 @@ use image::imageops::crop_imm;
 use rdev::EventType;
 use screenshots::Screen;
 use serde::{Deserialize, Serialize};
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct ClickEvent {
@@ -591,6 +591,7 @@ fn spawn_global_input_listener(app_handle: tauri::AppHandle, state: Arc<Mutex<Re
     });
 
     let state_for_listener = Arc::clone(&state);
+    let state_for_listener_for_events = Arc::clone(&state_for_listener);
     let app_handle_for_listener = app_handle.clone();
     thread::spawn(move || {
         let mut last_position: Option<(f64, f64)> = None;
@@ -621,7 +622,7 @@ fn spawn_global_input_listener(app_handle: tauri::AppHandle, state: Arc<Mutex<Re
                 if is_toggle_shortcut_pressed(&pressed_keys) && !shortcut_armed {
                     shortcut_armed = true;
                     let app_handle = app_handle_for_listener.clone();
-                    let toggle_state = Arc::clone(&state_for_listener);
+                    let toggle_state = Arc::clone(&state_for_listener_for_events);
                     thread::spawn(move || {
                         let is_recording = toggle_state
                             .lock()
@@ -788,7 +789,7 @@ pub fn run() {
         .manage(recorder_state)
         .setup(|app| {
             let state = app.state::<Arc<Mutex<RecorderState>>>().inner().clone();
-            spawn_global_input_listener(app.handle(), state);
+            spawn_global_input_listener(app.handle().clone(), state);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
